@@ -179,7 +179,7 @@ LimitNOFILE=1048576
 OOMScoreAdjust=-100
 
 # 启动命令：清理可能残留的网络命名空间
-ExecStartPre=/bin/rm -f /run/netns/daens
+ExecStartPre=/sbin/ip netns delete daens 2>/dev/null; /bin/rm -f /run/netns/daens
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
 # 环境变量：GEO 数据路径
