@@ -54,16 +54,20 @@ bash onekey-daed.sh
 | **2** | 卸载：停止服务、删除二进制/配置/日志 |
 | **0** | 退出 |
 
-### 指定版本安装
+### 指定版本 / 从 Docker 获取最新
 
-官方 release 可能滞后于主线代码，可通过 `DAED_VER` 环境变量指定版本：
+官方 release 可能滞后于主线代码，以下两种方式可选：
 
 ```bash
+# 方式一：指定 GitHub release 版本号
 DAED_VER=v1.28.0 bash onekey-daed.sh
+
+# 方式二（推荐）：从官方 Docker 镜像提取最新版（获取 main 分支新功能）
+DAED_SRC=docker bash onekey-daed.sh
 ```
 
-> 版本号需与 [GitHub Releases](https://github.com/daeuniverse/daed/releases) 的 tag 名一致，
-> 或使用 wkccd 等第三方构建的版本号。如果下载失败请自行寻找对应二进制文件。
+> 方式一要求版本号对应 [GitHub Releases](https://github.com/daeuniverse/daed/releases) 的 tag 名。
+> 方式二需要系统已安装 Docker，会自动 pull `ghcr.io/daeuniverse/daed:latest` 并提取二进制。
 
 ## 安装流程
 
