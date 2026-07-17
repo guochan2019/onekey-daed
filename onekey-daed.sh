@@ -170,8 +170,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=notify
-User=root
+Type=simple
 
 # 资源限制
 MemoryHigh=512M
