@@ -179,8 +179,8 @@ LimitNOFILE=1048576
 OOMScoreAdjust=-100
 
 # 启动命令：挂载 BPF 文件系统（LXC 中需先创建目录） + 清理残留网络命名空间
-ExecStartPre=/bin/mkdir -p /sys/fs/bpf && /bin/mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true
-ExecStartPre=/sbin/ip netns delete daens 2>/dev/null; /bin/rm -f /run/netns/daens
+ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true'
+ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens'
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
 # 环境变量：GEO 数据路径
