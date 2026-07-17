@@ -67,6 +67,28 @@ get_current_ver() {
   "$BIN" version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
 }
 
+# ---------- 检测 kernel 是否满足 eBPF 要求 ----------
+check_kernel() {
+  local major minor
+  major=$(uname -r | cut -d. -f1)
+  minor=$(uname -r | cut -d. -f2)
+  if [ "$major" -lt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -lt 17 ]; }; then
+    err "内核版本过低 ($(uname -r))，daed 需要 Linux 5.17+"
+  fi
+
+  # 关键 eBPF 内核配置检查
+  local missing=""
+  for cfg in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_DEBUG_INFO_BTF; do
+    if ! zgrep -q "${cfg}=y" /proc/config.gz 2>/dev/null && \
+       ! grep -q "${cfg}=y" /boot/config-$(uname -r) 2>/dev/null; then
+      missing="$missing $cfg"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    err "内核缺少必要 eBPF 配置:$missing\n  请确认内核编译时启用了这些选项"
+  fi
+}
+
 # ---------- 卸载 ----------
 uninstall_daed() {
   echo ""
@@ -93,6 +115,9 @@ uninstall_daed() {
 do_install() {
   DAED_VER="$1"
   DAED_ARCH="$2"
+
+  # 检查内核是否满足 eBPF 要求
+  check_kernel
 
   # 检查依赖：GEO 数据由 mosdns 提供
   if [ ! -f "/usr/share/v2ray/geoip.dat" ] || [ ! -f "/usr/share/v2ray/geosite.dat" ]; then
