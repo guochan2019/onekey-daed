@@ -27,14 +27,6 @@ if [ "$(id -u)" -ne 0 ]; then
   err "请以 root 用户运行 (当前非 root)"
 fi
 
-# 可通过 DAED_VER 环境变量指定版本，如: DAED_VER=v1.28.0 bash onekey-daed.sh
-if [ -n "$DAED_VER" ]; then
-  FORCE_VER="$DAED_VER"
-  warn "使用指定版本: ${FORCE_VER}"
-else
-  FORCE_VER=""
-fi
-
 # ---------- 检测架构 ----------
 detect_arch() {
   case "$(uname -m)" in
@@ -308,14 +300,10 @@ case "$ACTION" in
     exit 0
     ;;
   1|"")
-    if [ -n "$FORCE_VER" ]; then
-      LATEST_VER="$FORCE_VER"
-    else
-      LATEST_VER=$(fetch_latest_ver)
-      if [ -z "$LATEST_VER" ]; then
-        LATEST_VER="$FALLBACK_VER"
-        warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
-      fi
+    LATEST_VER=$(fetch_latest_ver)
+    if [ -z "$LATEST_VER" ]; then
+      LATEST_VER="$FALLBACK_VER"
+      warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
     fi
 
     if [ "$INSTALLED" = true ]; then
