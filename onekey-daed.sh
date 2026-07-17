@@ -53,9 +53,12 @@ detect_arch() {
 
 # ---------- 获取最新版本 ----------
 fetch_latest_ver() {
+  # 该仓库有多个子项目 tag（dae-lang-core-v*、dae-lsp-v* 等），
+  # 需过滤出 daed 本身的 release（纯 v 开头版本号）
   curl -s --connect-timeout 5 \
-    https://api.github.com/repos/daeuniverse/daed/releases/latest \
-    | grep -o '"tag_name": *"[^"]*"' | grep -o 'v[^\"]*' 2>/dev/null || echo ""
+    https://api.github.com/repos/daeuniverse/daed/releases \
+    | grep -o '"tag_name": *"v[0-9]*\.[0-9]*\.[0-9]*"' \
+    | head -1 | grep -o 'v[^\"]*' 2>/dev/null || echo ""
 }
 
 # ---------- 获取当前版本 ----------
