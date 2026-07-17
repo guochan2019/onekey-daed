@@ -8,12 +8,13 @@
 set -e
 
 trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
-  - 网络连接（能否访问 github.com）
+  - 网络连接（能否访问 github.com 或 ghcr.io）
   - 是否以 root 运行" >&2' ERR
 
 # ---------- 配置 ----------
 FALLBACK_VER="v1.28.0"
 # 可通过 DAED_VER 环境变量指定版本，如: DAED_VER=v1.28.0 bash onekey-daed.sh
+# 或 DAED_SRC=docker 使用 Docker 镜像提取最新版（推荐，获取 main 分支新功能）
 if [ -n "$DAED_VER" ]; then
   FORCE_VER="$DAED_VER"
   warn "使用指定版本: ${FORCE_VER}"
@@ -130,10 +131,31 @@ uninstall_daed() {
   exit 0
 }
 
+do_install_from_docker() {
+  info "从 Docker 镜像提取 daed（ghcr.io/daeuniverse/daed:latest）..."
+  if ! command -v docker &>/dev/null; then
+    warn "Docker 未安装，尝试自动安装..."
+    apt install -y -qq docker.io || apt install -y -qq docker-ce || {
+      err "Docker 安装失败，请手动安装后再试\n  curl -fsSL https://get.docker.com | bash"
+    }
+  fi
+  docker pull ghcr.io/daeuniverse/daed:latest
+  local cid
+  cid=$(docker create ghcr.io/daeuniverse/daed:latest)
+  docker cp "$cid":/usr/local/bin/daed "$BIN"
+  docker rm "$cid" >/dev/null
+  chmod +x "$BIN"
+  # 获取实际版本号
+  DAED_VER=$("$BIN" version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  [ -z "$DAED_VER" ] && DAED_VER="(Docker)"
+  info "  ✓ daed ${DAED_VER} 已从 Docker 提取"
+}
+
 # ---------- 安装 ----------
 do_install() {
-  DAED_VER="$1"
-  DAED_ARCH="$2"
+  DAED_VER="${1}"
+  DAED_ARCH="${2}"
+  FROM_DOCKER="${3:-false}"
 
   # 检查内核是否满足 eBPF 要求
   check_kernel
@@ -147,21 +169,23 @@ do_install() {
   apt update -qq
   apt install -y -qq wget unzip curl
 
-  info "=== 2/5 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
-  DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
-  TMPDIR=$(mktemp -d)
-  cd "$TMPDIR"
-  wget -q "$DOWNLOAD_URL" -O daed.zip
-  unzip -q daed.zip
-  # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
-  BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
-  if [ -z "$BINARY_PATH" ]; then
-    err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+  if [ "$FROM_DOCKER" != "true" ]; then
+    info "=== 2/5 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
+    DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
+    TMPDIR=$(mktemp -d)
+    cd "$TMPDIR"
+    wget -q "$DOWNLOAD_URL" -O daed.zip
+    unzip -q daed.zip
+    # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
+    BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
+    if [ -z "$BINARY_PATH" ]; then
+      err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+    fi
+    install -m 755 "$BINARY_PATH" "$BIN"
+    chmod +x "$BIN"
+    rm -rf "$TMPDIR"
+    "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
   fi
-  install -m 755 "$BINARY_PATH" "$BIN"
-  chmod +x "$BIN"
-  rm -rf "$TMPDIR"
-  "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
 
   info "=== 3/5 创建目录结构 ==="
   mkdir -p "$INSTALL_DIR"
@@ -308,7 +332,11 @@ case "$ACTION" in
     exit 0
     ;;
   1|"")
-    if [ -n "$FORCE_VER" ]; then
+    if [ "$DAED_SRC" = "docker" ]; then
+      # 从 Docker 提取二进制，然后继续安装流程
+      do_install_from_docker
+      do_install "" "" "true"
+    elif [ -n "$FORCE_VER" ]; then
       LATEST_VER="$FORCE_VER"
     else
       LATEST_VER=$(fetch_latest_ver)
