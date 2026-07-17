@@ -15,7 +15,7 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
 FALLBACK_VER="v1.27.0"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
-CONF_DIR="/etc/daed"
+CONF_DIR="/opt/daed"
 
 # ---------- 彩色输出 ----------
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -128,8 +128,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/etc/daed
-ExecStart=/usr/local/bin/daed run -c /etc/daed
+WorkingDirectory=/opt/daed
+ExecStart=/usr/local/bin/daed run -c /opt/daed
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
