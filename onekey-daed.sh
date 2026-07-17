@@ -10,16 +10,8 @@ set -e
 trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 网络连接（能否访问 github.com）
   - 是否以 root 运行" >&2' ERR
-
 # ---------- 配置 ----------
 FALLBACK_VER="v1.28.0"
-# 可通过 DAED_VER 环境变量指定版本，如: DAED_VER=v1.28.0 bash onekey-daed.sh
-if [ -n "$DAED_VER" ]; then
-  FORCE_VER="$DAED_VER"
-  warn "使用指定版本: ${FORCE_VER}"
-else
-  FORCE_VER=""
-fi
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
@@ -33,6 +25,14 @@ err()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 # ---------- 检测 root ----------
 if [ "$(id -u)" -ne 0 ]; then
   err "请以 root 用户运行 (当前非 root)"
+fi
+
+# 可通过 DAED_VER 环境变量指定版本，如: DAED_VER=v1.28.0 bash onekey-daed.sh
+if [ -n "$DAED_VER" ]; then
+  FORCE_VER="$DAED_VER"
+  warn "使用指定版本: ${FORCE_VER}"
+else
+  FORCE_VER=""
 fi
 
 # ---------- 检测架构 ----------
