@@ -12,7 +12,7 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 是否以 root 运行" >&2' ERR
 
 # ---------- 配置 ----------
-FALLBACK_VER="v1.27.0"
+FALLBACK_VER="v1.28.0"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
