@@ -174,9 +174,6 @@ SERVICEEOF
   info " systemctl status daed    # 状态"
   info " journalctl -u daed -f    # 实时日志"
   info ""
-  info "⚠ daed 在 LXC 中可能无法使用 eBPF 内核功能"
-  info "  Web 管理面板和 API 正常工作不受影响"
-  info ""
 }
 
 # ---------- 升级 ----------
