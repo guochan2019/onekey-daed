@@ -16,7 +16,6 @@ FALLBACK_VER="v1.27.0"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/etc/daed"
-GEO_DIR="/usr/local/share/daed"
 
 # ---------- 彩色输出 ----------
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -81,7 +80,6 @@ uninstall_daed() {
   rm -f "$BIN"
   rm -rf "$INSTALL_DIR"
   rm -rf "$CONF_DIR"
-  rm -rf "$GEO_DIR"
   rm -rf /var/log/daed
 
   info "✓ daed 已卸载"
@@ -91,27 +89,21 @@ uninstall_daed() {
   exit 0
 }
 
-# ---------- 下载 GEO 数据 ----------
-download_geo() {
-  mkdir -p "$GEO_DIR"
-  echo -n "  下载 geoip.dat ... "
-  wget -q "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/master/geoip.dat" -O "${GEO_DIR}/geoip.dat"
-  echo "done ($(du -h "${GEO_DIR}/geoip.dat" | cut -f1))"
-  echo -n "  下载 geosite.dat ... "
-  wget -q "https://github.com/v2rayA/dist-v2ray-rules-dat/raw/master/geosite.dat" -O "${GEO_DIR}/geosite.dat"
-  echo "done ($(du -h "${GEO_DIR}/geosite.dat" | cut -f1))"
-}
-
 # ---------- 安装 ----------
 do_install() {
   DAED_VER="$1"
   DAED_ARCH="$2"
 
-  info "=== 1/6 安装系统依赖 ==="
+  # 检查依赖：GEO 数据由 mosdns 提供
+  if [ ! -f "/usr/share/v2ray/geoip.dat" ] || [ ! -f "/usr/share/v2ray/geosite.dat" ]; then
+    err "未检测到 mosdns 的 GEO 数据 (/usr/share/v2ray/geoip.dat)\n  daed 需要依赖 mosdns，请先安装 onekey-mosdns"
+  fi
+
+  info "=== 1/5 安装系统依赖 ==="
   apt update -qq
   apt install -y -qq wget unzip curl
 
-  info "=== 2/6 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
+  info "=== 2/5 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
   DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
   TMPDIR=$(mktemp -d)
   cd "$TMPDIR"
@@ -122,15 +114,12 @@ do_install() {
   rm -rf "$TMPDIR"
   "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
 
-  info "=== 3/6 创建目录结构 ==="
+  info "=== 3/5 创建目录结构 ==="
   mkdir -p "$INSTALL_DIR"
   mkdir -p "$CONF_DIR"
   mkdir -p /var/log/daed
 
-  info "=== 4/6 下载 GEO 数据 ==="
-  download_geo
-
-  info "=== 5/6 创建 systemd 服务 ==="
+  info "=== 4/5 创建 systemd 服务 ==="
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
 Description=daed - Modern web dashboard for dae
@@ -145,8 +134,8 @@ Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
-Environment=DAED_GEOIP_DAT=/usr/local/share/daed/geoip.dat
-Environment=DAED_GEOSITE_DAT=/usr/local/share/daed/geosite.dat
+Environment=DAED_GEOIP_DAT=/usr/share/v2ray/geoip.dat
+Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
 
 StandardOutput=append:/var/log/daed/daed.log
 StandardError=append:/var/log/daed/daed.log
@@ -157,7 +146,7 @@ SERVICEEOF
   systemctl daemon-reload
   systemctl enable daed
 
-  info "=== 6/6 启动 daed 服务 ==="
+  info "=== 5/5 启动 daed 服务 ==="
   systemctl start daed
   sleep 2
   if systemctl is-active daed &>/dev/null; then
@@ -174,7 +163,7 @@ SERVICEEOF
   info " daed 版本:    ${DAED_VER}"
   info " 安装目录:     ${INSTALL_DIR}"
   info " 配置目录:     ${CONF_DIR}"
-  info " GEO 数据:     ${GEO_DIR}"
+  info " GEO 数据:     共享 mosdns (/usr/share/v2ray/)"
   info " 日志文件:     /var/log/daed/daed.log"
   info ""
   info "========== 访问面板 =========="
