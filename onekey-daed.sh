@@ -146,7 +146,7 @@ do_install_from_docker() {
   docker rm "$cid" >/dev/null
   chmod +x "$BIN"
   # 获取实际版本号
-  DAED_VER=$("$BIN" version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  DAED_VER=$("$BIN" version 2>/dev/null | head -1 | sed 's/^.*daed-//i; s/_wing.*//')
   [ -z "$DAED_VER" ] && DAED_VER="(Docker)"
   info "  ✓ daed ${DAED_VER} 已从 Docker 提取"
 }
@@ -336,6 +336,7 @@ case "$ACTION" in
       # 从 Docker 提取二进制，然后继续安装流程
       do_install_from_docker
       do_install "" "" "true"
+      break
     elif [ -n "$FORCE_VER" ]; then
       LATEST_VER="$FORCE_VER"
     else
