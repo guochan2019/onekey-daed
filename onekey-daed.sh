@@ -178,8 +178,8 @@ LimitNPROC=4096
 LimitNOFILE=1048576
 OOMScoreAdjust=-100
 
-# 启动命令：挂载 BPF 文件系统 + 清理残留网络命名空间
-ExecStartPre=/bin/mountpoint -q /sys/fs/bpf || /bin/mount -t bpf bpf /sys/fs/bpf
+# 启动命令：挂载 BPF 文件系统（LXC 中需先创建目录） + 清理残留网络命名空间
+ExecStartPre=/bin/mkdir -p /sys/fs/bpf && /bin/mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true
 ExecStartPre=/sbin/ip netns delete daens 2>/dev/null; /bin/rm -f /run/netns/daens
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
