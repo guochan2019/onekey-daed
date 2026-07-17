@@ -76,16 +76,25 @@ check_kernel() {
     err "内核版本过低 ($(uname -r))，daed 需要 Linux 5.17+"
   fi
 
-  # 关键 eBPF 内核配置检查
+  # 关键 eBPF 内核配置检查（仅当可读取内核配置时）
   local missing=""
   for cfg in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_DEBUG_INFO_BTF; do
-    if ! zgrep -q "${cfg}=y" /proc/config.gz 2>/dev/null && \
-       ! grep -q "${cfg}=y" /boot/config-$(uname -r) 2>/dev/null; then
+    if zgrep -q "${cfg}=y" /proc/config.gz 2>/dev/null || \
+       grep -q "${cfg}=y" /boot/config-$(uname -r) 2>/dev/null; then
+      :  # 配置已启用
+    else
       missing="$missing $cfg"
     fi
   done
   if [ -n "$missing" ]; then
-    err "内核缺少必要 eBPF 配置:$missing\n  请确认内核编译时启用了这些选项"
+    if [ -f /proc/config.gz ] || [ -f "/boot/config-$(uname -r)" ]; then
+      # 配置文件存在但缺少选项 → 硬错误
+      err "内核缺少必要 eBPF 配置:$missing\n  请确认内核编译时启用了这些选项"
+    else
+      # 配置文件不可读（如 LXC 容器），仅警告
+      warn "无法读取内核配置（LXC 容器常见），跳过 eBPF 配置检查"
+      warn "  如果 daed 启动失败，请确认宿主机内核启用了上述 eBPF 选项"
+    fi
   fi
 }
 
