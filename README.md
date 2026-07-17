@@ -54,6 +54,17 @@ bash onekey-daed.sh
 | **2** | 卸载：停止服务、删除二进制/配置/日志 |
 | **0** | 退出 |
 
+### 指定版本安装
+
+官方 release 可能滞后于主线代码，可通过 `DAED_VER` 环境变量指定版本：
+
+```bash
+DAED_VER=v1.28.0 bash onekey-daed.sh
+```
+
+> 版本号需与 [GitHub Releases](https://github.com/daeuniverse/daed/releases) 的 tag 名一致，
+> 或使用 wkccd 等第三方构建的版本号。如果下载失败请自行寻找对应二进制文件。
+
 ## 安装流程
 
 | 步骤 | 说明 |
