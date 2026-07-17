@@ -146,7 +146,12 @@ do_install() {
   cd "$TMPDIR"
   wget -q "$DOWNLOAD_URL" -O daed.zip
   unzip -q daed.zip
-  install -m 755 daed "$BIN"
+  # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
+  BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
+  if [ -z "$BINARY_PATH" ]; then
+    err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+  fi
+  install -m 755 "$BINARY_PATH" "$BIN"
   chmod +x "$BIN"
   rm -rf "$TMPDIR"
   "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
@@ -240,7 +245,12 @@ do_upgrade() {
   cd "$TMPDIR"
   wget -q "$DOWNLOAD_URL" -O daed.zip
   unzip -q daed.zip
-  install -m 755 daed "$BIN"
+  # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
+  BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
+  if [ -z "$BINARY_PATH" ]; then
+    err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+  fi
+  install -m 755 "$BINARY_PATH" "$BIN"
   chmod +x "$BIN"
   rm -rf "$TMPDIR"
 
