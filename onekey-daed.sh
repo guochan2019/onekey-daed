@@ -124,18 +124,33 @@ do_install() {
 [Unit]
 Description=daed - Modern web dashboard for dae
 Documentation=https://github.com/daeuniverse/daed
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-Type=simple
-WorkingDirectory=/opt/daed
-ExecStart=/usr/local/bin/daed run -c /opt/daed
-Restart=on-failure
-RestartSec=5
-LimitNOFILE=65536
+Type=notify
+User=root
 
+# 资源限制
+MemoryHigh=512M
+LimitNPROC=4096
+LimitNOFILE=1048576
+OOMScoreAdjust=-100
+
+# 启动命令
+ExecStart=/usr/local/bin/daed run -c /opt/daed
+
+# 环境变量：GEO 数据路径
 Environment=DAED_GEOIP_DAT=/usr/share/v2ray/geoip.dat
 Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
+
+# 重启策略
+Restart=on-failure
+RestartSec=5
+
+# 超时（eBPF 加载可能需要较长时间）
+TimeoutStartSec=120
+TimeoutStopSec=30
 
 StandardOutput=append:/var/log/daed/daed.log
 StandardError=append:/var/log/daed/daed.log
