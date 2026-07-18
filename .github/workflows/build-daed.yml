@@ -69,17 +69,22 @@ jobs:
       - name: Generate version
         id: version
         run: |
+          # 从 apps/web/package.json 取前端版本号
+          WEB_VER=$(grep '"version"' apps/web/package.json | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          DAED_COMMIT=$(git rev-parse --short HEAD)
           cd wing
-          DATE=$(git log -1 --format="%cd" --date=short | sed s/-//g)
-          COUNT=$(git rev-list --count HEAD)
-          COMMIT=$(git rev-parse --short HEAD)
-          echo "version=unstable-$DATE.r$COUNT.$COMMIT" >> $GITHUB_OUTPUT
+          WING_COMMIT=$(git rev-parse --short HEAD)
+          cd dae-core
+          CORE_COMMIT=$(git rev-parse --short HEAD)
+          cd ../..
+          echo "version=${WEB_VER}" >> $GITHUB_OUTPUT
+          echo "full_version=daed-${DAED_COMMIT}_wing-${WING_COMMIT}_core-${CORE_COMMIT}" >> $GITHUB_OUTPUT
 
       - name: Build daed binary
         run: |
           cd wing
           make deps
-          make bundle APPNAME=daed VERSION=${{ steps.version.outputs.version }} \
+          make bundle APPNAME=daed VERSION=${{ steps.version.outputs.full_version }} \
             OUTPUT=../daed-${{ matrix.arch.name }} \
             WEB_DIST=$(realpath ../dist)
 
