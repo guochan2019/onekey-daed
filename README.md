@@ -37,42 +37,44 @@ bash onekey-daed.sh
 [INFO] daed 未安装
 
 请选择操作：
-  1. 安装 / 升级 daed
-  2. 卸载 daed
+  1. 安装 / 升级 daed（云编译版）
+  2. 安装 / 升级 daed（本地二进制文件）
+  3. 卸载 daed
   0. 退出
 ```
 
 | 选项 | 功能 |
 |------|------|
-| **1** | 未安装 → 5 步完整安装；已安装 → 检测版本并升级 |
-| **2** | 卸载：停止服务、删除二进制/配置/日志 |
+| **1** | 从 GitHub Actions 云编译版安装/升级（自动拉取本仓库最新 release） |
+| **2** | 使用本地预编译二进制文件安装/升级（手动输入路径） |
+| **3** | 卸载：停止服务、删除二进制/配置/日志 |
 | **0** | 退出 |
 
-## 下载源模式
+## 下载来源说明
 
-脚本支持三种获取 daed 二进制的方式：
+脚本内置两种获取 daed 二进制的方式，通过菜单选择：
 
-### 1. 官方 release（默认）
+### 1. 云编译版（默认）
 
-从 `daeuniverse/daed` GitHub release 拉取最新稳定版，自动匹配 CPU 指令集：
+使用 GitHub Actions 从 [QiuSimons/luci-app-daed](https://github.com/QiuSimons/luci-app-daed) 锁定的源码编译，与 OpenWrt 编译版完全一致。编译完成后自动发布到本仓库 release，脚本自动下载：
 
 ```bash
 bash onekey-daed.sh
-```
-
-### 2. CI 云编译版（推荐）
-
-使用 GitHub Actions 从 [QiuSimons/luci-app-daed](https://github.com/QiuSimons/luci-app-daed) 锁定的源码编译，与 OpenWrt 编译版完全一致。编译完成后自动发布到本仓库 release：
-
-```bash
-DAED_SRC=self bash onekey-daed.sh
+# 选 1
 ```
 
 触发编译：`Actions` → `Build daed binary` → `Run workflow`
 
-### 3. 本地二进制文件
+### 2. 本地二进制文件
 
-支持直接使用预编译的二进制（如从 OpenWrt 编译环境中提取）：
+支持从 OpenWrt 编译环境或其它来源提取 daed 二进制：
+
+```bash
+bash onekey-daed.sh
+# 选 2 → 输入文件路径
+```
+
+也支持通过环境变量直接指定（免交互）：
 
 ```bash
 DAED_BIN=/path/to/daed bash onekey-daed.sh
