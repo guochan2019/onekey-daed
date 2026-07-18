@@ -33,15 +33,29 @@ jobs:
         id: parse
         run: |
           MAKEFILE=qiurepo/daed/Makefile
-          DAED_VER=$(grep '^DAED_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # daed-671e65d
-          WING_VER=$(grep '^WING_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # wing-dc50308
-          CORE_VER=$(grep '^CORE_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # core-09c6c8c
-          DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2) # full sha
+          DAED_VER=$(grep '^DAED_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          WING_VER=$(grep '^WING_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          CORE_VER=$(grep '^CORE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          WING_SHORT=${WING_VER#wing-}
+          CORE_SHORT=${CORE_VER#core-}
+          # 短 SHA 不足以让 checkout action 使用，通过 GitHub API 补齐完整 SHA
+          resolve_sha() {
+            local repo="$1" short="$2"
+            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${repo}/commits/${short}" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha',''))"
+          }
+          WING_FULL=$(resolve_sha daeuniverse/dae-wing "$WING_SHORT")
+          CORE_FULL=$(resolve_sha daeuniverse/dae "$CORE_SHORT")
           echo "daed_commit=${DAED_HASH}" >> $GITHUB_OUTPUT
-          echo "wing_commit=${WING_VER#wing-}" >> $GITHUB_OUTPUT
-          echo "core_commit=${CORE_VER#core-}" >> $GITHUB_OUTPUT
+          echo "wing_commit=${WING_FULL}" >> $GITHUB_OUTPUT
+          echo "core_commit=${CORE_FULL}" >> $GITHUB_OUTPUT
           echo "full_version=${DAED_VER}_${WING_VER}_${CORE_VER}" >> $GITHUB_OUTPUT
           echo "Using: ${DAED_VER}_${WING_VER}_${CORE_VER}"
+          echo "  daed: ${DAED_HASH:0:7}"
+          echo "  wing: ${WING_SHORT} -> ${WING_FULL}"
+          echo "  core: ${CORE_SHORT} -> ${CORE_FULL}"
 
   build:
     name: Build daed (x86_64)
