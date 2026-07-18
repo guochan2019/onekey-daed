@@ -60,7 +60,7 @@ jobs:
 
       - name: Build web frontend
         run: |
-          pnpm install --frozen-lockfile
+          pnpm install --no-frozen-lockfile
           TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build
           if [ -d "apps/web/dist" ] && [ ! -d "dist" ]; then
             cp -r apps/web/dist dist
