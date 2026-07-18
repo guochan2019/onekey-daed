@@ -124,8 +124,10 @@ do_install() {
   info "=== 2/5 获取 daed ==="
   if [ -n "$LOCAL_BIN" ]; then
     info "  → 使用本地二进制: ${LOCAL_BIN}"
-    cp "$LOCAL_BIN" "$BIN"
-    chmod +x "$BIN"
+    TMP_FILE=$(mktemp)
+    cp "$LOCAL_BIN" "$TMP_FILE"
+    chmod +x "$TMP_FILE"
+    mv "$TMP_FILE" "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
@@ -218,8 +220,10 @@ do_upgrade() {
   info "=== 升级 daed: ${CURRENT_VER:-未知} → ${DAED_VER} ==="
   if [ -n "$LOCAL_BIN" ]; then
     info "  → 使用本地二进制: ${LOCAL_BIN}"
-    cp "$LOCAL_BIN" "$BIN"
-    chmod +x "$BIN"
+    TMP_FILE=$(mktemp)
+    cp "$LOCAL_BIN" "$TMP_FILE"
+    chmod +x "$TMP_FILE"
+    mv "$TMP_FILE" "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
