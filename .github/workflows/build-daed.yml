@@ -1,0 +1,144 @@
+name: Build daed binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override version string (leave empty for auto)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: write
+
+env:
+  DAED_REPO: daeuniverse/daed
+  DAED_BRANCH: main
+
+jobs:
+  build:
+    name: Build daed (${{ matrix.arch.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: x86_64
+            goarch: amd64
+          - name: arm64
+            goarch: arm64
+
+    steps:
+      - name: Checkout daed source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DAED_REPO }}
+          ref: ${{ env.DAED_BRANCH }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '~1.22'
+          cache-dependency-path: wing/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install system deps (LLVM/Clang for eBPF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq llvm-15 clang-15 make
+          echo "CLANG=clang-15" >> $GITHUB_ENV
+          echo "BPF_STRIP_FLAG=-no-strip" >> $GITHUB_ENV
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Build web frontend
+        run: |
+          pnpm install
+          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
+          if [ -d "apps/web/dist" ] && [ ! -d "dist" ]; then
+            cp -r apps/web/dist dist
+          fi
+
+      - name: Generate version
+        id: version
+        run: |
+          cd wing
+          DATE=$(git log -1 --format="%cd" --date=short | sed s/-//g)
+          COUNT=$(git rev-list --count HEAD)
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "version=unstable-$DATE.r$COUNT.$COMMIT" >> $GITHUB_OUTPUT
+
+      - name: Build daed binary
+        run: |
+          cd wing
+          make deps
+          make bundle APPNAME=daed VERSION=${{ steps.version.outputs.version }} \
+            OUTPUT=../daed-${{ matrix.arch.name }} \
+            WEB_DIST=$(realpath ../dist)
+
+      - name: Verify binary
+        run: |
+          file daed-${{ matrix.arch.name }}
+          chmod +x daed-${{ matrix.arch.name }}
+          ./daed-${{ matrix.arch.name }} --version || true
+          ls -lh daed-${{ matrix.arch.name }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daed-linux-${{ matrix.arch.name }}
+          path: daed-${{ matrix.arch.name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create release
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lah artifacts/
+
+      - name: Generate release tag
+        id: meta
+        run: |
+          DATE=$(date +%Y%m%d)
+          echo "tag=daed_build_${DATE}" >> $GITHUB_OUTPUT
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
+          body: |
+            Auto-built daed from [${{ env.DAED_REPO }}](https://github.com/${{ env.DAED_REPO }}) main branch.
+
+            ## Files
+            - `daed-linux-x86_64` — x86_64 (AMD64)
+            - `daed-linux-arm64` — ARM64 (AArch64)
+
+            ## Usage
+            ```bash
+            wget -qO /usr/local/bin/daed https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/daed-linux-x86_64
+            chmod +x /usr/local/bin/daed
+            ```
+          files: artifacts/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          make_latest: true

@@ -12,6 +12,9 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 是否以 root 运行" >&2' ERR
 # ---------- 配置 ----------
 FALLBACK_VER="v1.28.0"
+# 下载来源：self=从本仓库 release 拉取（CI 云编译），否则从官方 GitHub release 拉取
+# 用法: DAED_SRC=self bash onekey-daed.sh
+DAED_SRC="${DAED_SRC:-official}"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
@@ -57,12 +60,19 @@ detect_arch() {
 
 # ---------- 获取最新版本 ----------
 fetch_latest_ver() {
-  # 该仓库有多个子项目 tag（dae-lang-core-v*、dae-lsp-v* 等），
-  # 需过滤出 daed 本身的 release（纯 v 开头版本号）
-  curl -s --connect-timeout 5 \
-    https://api.github.com/repos/daeuniverse/daed/releases \
-    | grep -o '"tag_name": *"v[0-9]*\.[0-9]*\.[0-9]*"' \
-    | head -1 | grep -o 'v[^\"]*' 2>/dev/null || echo ""
+  # self 模式：从本仓库（guochan2019/onekey-daed）的 release 取最新 tag
+  if [ "$DAED_SRC" = "self" ]; then
+    curl -s --connect-timeout 5 \
+      https://api.github.com/repos/guochan2019/onekey-daed/releases/latest \
+      | grep -o '"tag_name": *"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"' 2>/dev/null || echo ""
+  else
+    # 官方模式：该仓库有多个子项目 tag（dae-lang-core-v*、dae-lsp-v* 等），
+    # 需过滤出 daed 本身的 release（纯 v 开头版本号）
+    curl -s --connect-timeout 5 \
+      https://api.github.com/repos/daeuniverse/daed/releases \
+      | grep -o '"tag_name": *"v[0-9]*\.[0-9]*\.[0-9]*"' \
+      | head -1 | grep -o 'v[^\"]*' 2>/dev/null || echo ""
+  fi
 }
 
 # ---------- 获取当前版本 ----------
@@ -144,12 +154,23 @@ do_install() {
   apt update -qq
   apt install -y -qq wget unzip curl
 
-  info "=== 2/5 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
+  info "=== 2/5 获取 daed ==="
   if [ -n "$LOCAL_BIN" ]; then
     info "  → 使用本地二进制: ${LOCAL_BIN}"
     cp "$LOCAL_BIN" "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
+  elif [ "$DAED_SRC" = "self" ]; then
+    # 归一化架构名：CI 产物的命名是 daed-linux-x86_64 / daed-linux-arm64
+    case "$DAED_ARCH" in
+      x86_64*)  DL_ARCH="x86_64"  ;;
+      arm64)    DL_ARCH="arm64"    ;;
+      *)        DL_ARCH="$DAED_ARCH" ;;
+    esac
+    info "  → 从本仓库 release 下载: ${DAED_VER} (${DL_ARCH})"
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DL_ARCH}" -O "$BIN"
+    chmod +x "$BIN"
+    DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   else
     DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
     TMPDIR=$(mktemp -d)
@@ -257,6 +278,17 @@ do_upgrade() {
     cp "$LOCAL_BIN" "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
+  elif [ "$DAED_SRC" = "self" ]; then
+    # 归一化架构名：CI 产物的命名是 daed-linux-x86_64 / daed-linux-arm64
+    case "$DAED_ARCH" in
+      x86_64*)  DL_ARCH="x86_64"  ;;
+      arm64)    DL_ARCH="arm64"    ;;
+      *)        DL_ARCH="$DAED_ARCH" ;;
+    esac
+    info "  → 从本仓库 release 下载: ${DAED_VER} (${DL_ARCH})"
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DL_ARCH}" -O "$BIN"
+    chmod +x "$BIN"
+    DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   else
     DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
     TMPDIR=$(mktemp -d)
