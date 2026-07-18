@@ -129,8 +129,10 @@ do_install() {
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
-    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
-    chmod +x "$BIN"
+    TMP_FILE=$(mktemp)
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$TMP_FILE"
+    chmod +x "$TMP_FILE"
+    mv "$TMP_FILE" "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   fi
 
@@ -221,8 +223,10 @@ do_upgrade() {
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
-    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
-    chmod +x "$BIN"
+    TMP_FILE=$(mktemp)
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$TMP_FILE"
+    chmod +x "$TMP_FILE"
+    mv "$TMP_FILE" "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   fi
 
