@@ -9,13 +9,7 @@
 > ⚠️ 需要 root 权限。内核需 **Linux 5.17+** 且启用 eBPF。
 
 ```bash
-# 方式一：gh CLI（推荐）
 gh repo clone guochan2019/onekey-daed
-cd onekey-daed
-bash onekey-daed.sh
-
-# 方式二：git clone（需配置 SSH 密钥）
-git clone git@github.com:guochan2019/onekey-daed.git
 cd onekey-daed
 bash onekey-daed.sh
 ```
@@ -54,6 +48,36 @@ bash onekey-daed.sh
 | **2** | 卸载：停止服务、删除二进制/配置/日志 |
 | **0** | 退出 |
 
+## 下载源模式
+
+脚本支持三种获取 daed 二进制的方式：
+
+### 1. 官方 release（默认）
+
+从 `daeuniverse/daed` GitHub release 拉取最新稳定版，自动匹配 CPU 指令集：
+
+```bash
+bash onekey-daed.sh
+```
+
+### 2. CI 云编译版（推荐）
+
+使用 GitHub Actions 从 [QiuSimons/luci-app-daed](https://github.com/QiuSimons/luci-app-daed) 锁定的源码编译，与 OpenWrt 编译版完全一致。编译完成后自动发布到本仓库 release：
+
+```bash
+DAED_SRC=self bash onekey-daed.sh
+```
+
+触发编译：`Actions` → `Build daed binary` → `Run workflow`
+
+### 3. 本地二进制文件
+
+支持直接使用预编译的二进制（如从 OpenWrt 编译环境中提取）：
+
+```bash
+DAED_BIN=/path/to/daed bash onekey-daed.sh
+```
+
 ## 安装流程
 
 | 步骤 | 说明 |
@@ -61,7 +85,7 @@ bash onekey-daed.sh
 | 检测 | 内核版本 ≥ 5.17 + eBPF 配置检查 |
 | 检测 | 确认 mosdns GEO 数据存在 |
 | 1/5 | 安装依赖（wget、unzip、curl） |
-| 2/5 | 下载 daed，自动匹配 CPU 优化版 |
+| 2/5 | 下载/使用 daed 二进制 |
 | 3/5 | 创建目录结构 |
 | 4/5 | 创建 systemd 服务（对齐官方配置） |
 | 5/5 | 启动 daed 服务 |
@@ -79,7 +103,7 @@ bash onekey-daed.sh
 
 ## CPU 优化
 
-脚本自动检测 CPU 指令集，下载对应的优化版二进制：
+脚本自动检测 CPU 指令集，从官方 release 下载对应的优化版二进制（仅官方源模式）：
 
 | CPU 特性 | 下载版本 |
 |----------|---------|
