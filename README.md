@@ -9,7 +9,11 @@
 > ⚠️ 需要 root 权限。内核需 **Linux 5.17+** 且启用 eBPF。
 
 ```bash
-gh repo clone guochan2019/onekey-daed
+# 方式一：一键直达（推荐）
+bash <(wget -qO- https://raw.githubusercontent.com/guochan2019/onekey-daed/main/onekey-daed.sh)
+
+# 方式二：git clone
+git clone https://github.com/guochan2019/onekey-daed.git
 cd onekey-daed
 bash onekey-daed.sh
 ```
