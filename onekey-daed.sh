@@ -143,6 +143,17 @@ do_install() {
   mkdir -p "$CONF_DIR"
   mkdir -p /var/log/daed
 
+  # 将 GEO 数据链接到 daed 默认搜索路径（对齐 QiuSimons 做法）
+  mkdir -p /usr/share/daed
+  if [ -f /usr/share/v2ray/geoip.dat ] && [ -f /usr/share/v2ray/geosite.dat ]; then
+    ln -sf /usr/share/v2ray/geoip.dat /usr/share/daed/geoip.dat
+    ln -sf /usr/share/v2ray/geosite.dat /usr/share/daed/geosite.dat
+    info "  ✓ GEO 数据已链接到 /usr/share/daed/"
+  else
+    warn "  ⚠ /usr/share/v2ray/ 下未找到 GEO 数据"
+    warn "  请先安装 onekey-mosdns 或手动下载 geoip.dat / geosite.dat"
+  fi
+
   info "=== 4/5 创建 systemd 服务 ==="
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
