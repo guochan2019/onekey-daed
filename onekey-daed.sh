@@ -302,11 +302,6 @@ case "$ACTION" in
     fi
 
     if [ "$INSTALLED" = true ]; then
-      if [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" = "$LATEST_VER" ]; then
-        info "当前版本: ${CURRENT_VER}"
-        info "✓ 已是最新版本"
-        exit 0
-      fi
       do_upgrade "$LATEST_VER" "$DAED_ARCH" "$CURRENT_VER"
     else
       do_install "$LATEST_VER" "$DAED_ARCH"

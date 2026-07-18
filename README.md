@@ -90,10 +90,10 @@ DAED_BIN=/path/to/daed bash onekey-daed.sh
 |------|------|
 | 检测 | 内核版本 ≥ 5.17 + eBPF 配置检查 |
 | 检测 | 确认 mosdns GEO 数据存在 |
-| 1/5 | 安装依赖（wget、unzip、curl） |
+| 1/5 | 安装依赖（wget、curl） |
 | 2/5 | 下载/使用 daed 二进制 |
 | 3/5 | 创建目录结构 |
-| 4/5 | 创建 systemd 服务（对齐官方配置） |
+| 4/5 | 创建 systemd 服务 |
 | 5/5 | 启动 daed 服务 |
 
 ## 目录结构
@@ -106,18 +106,6 @@ DAED_BIN=/path/to/daed bash onekey-daed.sh
 ├── geoip.dat                # GEO 数据（由 mosdns 提供）
 └── geosite.dat
 ```
-
-## CPU 优化
-
-脚本自动检测 CPU 指令集，从官方 release 下载对应的优化版二进制（仅官方源模式）：
-
-| CPU 特性 | 下载版本 |
-|----------|---------|
-| 支持 AVX2 | `x86_64_v3_avx2` |
-| 仅 SSE  | `x86_64_v2_sse` |
-| 通用 x86_64 | `x86_64` |
-
-> ARM64、MIPS、RISC-V 等架构同样支持。
 
 ## 面板访问
 
@@ -141,12 +129,12 @@ journalctl -u daed -f       # 实时日志
 
 ```bash
 bash onekey-daed.sh
-# 选 1 → 升级；选 2 → 卸载
+# 选 1 → 升级；选 3 → 卸载
 ```
 
 ## 架构支持
 
-x86_64（含 AVX2/SSE 优化）/ arm64 / x86_32 / mips32 / mips32le / mips64 / mips64le / riscv64
+x86_64 / arm64
 
 ## 许可证
 
