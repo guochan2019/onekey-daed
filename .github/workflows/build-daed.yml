@@ -56,12 +56,12 @@ jobs:
           echo "BPF_STRIP_FLAG=-no-strip" >> $GITHUB_ENV
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@10.24.0
 
       - name: Build web frontend
         run: |
-          pnpm install
-          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
+          pnpm install --frozen-lockfile
+          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build
           if [ -d "apps/web/dist" ] && [ ! -d "dist" ]; then
             cp -r apps/web/dist dist
           fi
