@@ -129,17 +129,7 @@ do_install() {
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
-    if command -v gh &>/dev/null; then
-      gh release download "$DAED_VER" --repo guochan2019/onekey-daed --pattern "daed-linux-${DAED_ARCH}" --output "$BIN" --clobber
-    else
-      # fallback: 未安装 gh 时使用 wget + GitHub Token（如果有）
-      if [ -n "$GITHUB_TOKEN" ]; then
-        wget -q --header "Authorization: token $GITHUB_TOKEN" \
-          "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
-      else
-        err "私有仓库需要 gh CLI 认证才能下载\n  请安装 gh 并登录: apt install gh && gh auth login"
-      fi
-    fi
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   fi
@@ -231,14 +221,7 @@ do_upgrade() {
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
   else
     info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
-    if command -v gh &>/dev/null; then
-      gh release download "$DAED_VER" --repo guochan2019/onekey-daed --pattern "daed-linux-${DAED_ARCH}" --output "$BIN" --clobber
-    elif [ -n "$GITHUB_TOKEN" ]; then
-      wget -q --header "Authorization: token $GITHUB_TOKEN" \
-        "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
-    else
-      err "私有仓库需要 gh CLI 认证才能下载\n  请安装 gh 并登录: apt install gh && gh auth login"
-    fi
+    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}" -O "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
   fi
