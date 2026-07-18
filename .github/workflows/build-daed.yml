@@ -49,8 +49,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install system deps (LLVM/Clang for eBPF)
         run: |
@@ -59,8 +57,8 @@ jobs:
           echo "CLANG=clang-15" >> $GITHUB_ENV
           echo "BPF_STRIP_FLAG=-no-strip" >> $GITHUB_ENV
 
-      - name: Enable pnpm
-        run: corepack enable && corepack prepare pnpm@latest --activate
+      - name: Install pnpm
+        run: npm install -g pnpm
 
       - name: Build web frontend
         run: |
