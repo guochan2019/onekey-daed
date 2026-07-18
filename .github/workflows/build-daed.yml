@@ -27,8 +27,6 @@ jobs:
         arch:
           - name: x86_64
             goarch: amd64
-          - name: arm64
-            goarch: arm64
 
     steps:
       - name: Checkout daed source
