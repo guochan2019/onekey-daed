@@ -155,22 +155,22 @@ jobs:
           # compile final binary with embedallowed + trace tags
           go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
-            -o ../daed-x86_64 \
+            -o ../daed-linux-x86_64 \
             -trimpath -buildvcs=false -pgo=auto .
           cd ..
 
       - name: Verify binary
         run: |
-          file daed-x86_64
-          chmod +x daed-x86_64
-          ./daed-x86_64 --version
-          ls -lh daed-x86_64
+          file daed-linux-x86_64
+          chmod +x daed-linux-x86_64
+          ./daed-linux-x86_64 --version
+          ls -lh daed-linux-x86_64
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: daed-linux-x86_64
-          path: daed-x86_64
+          path: daed-linux-x86_64
           if-no-files-found: error
           retention-days: 7
 
