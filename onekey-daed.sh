@@ -11,10 +11,7 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 网络连接（能否访问 github.com）
   - 是否以 root 运行" >&2' ERR
 # ---------- 配置 ----------
-FALLBACK_VER="v1.28.0"
-# 下载来源：self=从本仓库 release 拉取（CI 云编译），否则从官方 GitHub release 拉取
-# 用法: DAED_SRC=self bash onekey-daed.sh
-DAED_SRC="${DAED_SRC:-official}"
+FALLBACK_VER="daed_build_20260718"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
@@ -38,41 +35,17 @@ LOCAL_BIN="${DAED_BIN:-}"
 # ---------- 检测架构 ----------
 detect_arch() {
   case "$(uname -m)" in
-    x86_64|amd64)
-      if grep -q avx2 /proc/cpuinfo 2>/dev/null; then
-        echo "x86_64_v3_avx2"
-      elif grep -q sse /proc/cpuinfo 2>/dev/null; then
-        echo "x86_64_v2_sse"
-      else
-        echo "x86_64"
-      fi
-      ;;
-    aarch64|arm64) echo "arm64"       ;;
-    i386|i686)     echo "x86_32"      ;;
-    mips)          echo "mips32"      ;;
-    mipsel)        echo "mips32le"    ;;
-    mips64)        echo "mips64"      ;;
-    mips64el)      echo "mips64le"    ;;
-    riscv64)       echo "riscv64"     ;;
-    *)             echo ""            ;;
+    x86_64|amd64)  echo "x86_64"  ;;
+    aarch64|arm64) echo "arm64"    ;;
+    *)             echo ""         ;;
   esac
 }
 
 # ---------- 获取最新版本 ----------
 fetch_latest_ver() {
-  # self 模式：从本仓库（guochan2019/onekey-daed）的 release 取最新 tag
-  if [ "$DAED_SRC" = "self" ]; then
-    curl -s --connect-timeout 5 \
-      https://api.github.com/repos/guochan2019/onekey-daed/releases/latest \
-      | grep -o '"tag_name": *"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"' 2>/dev/null || echo ""
-  else
-    # 官方模式：该仓库有多个子项目 tag（dae-lang-core-v*、dae-lsp-v* 等），
-    # 需过滤出 daed 本身的 release（纯 v 开头版本号）
-    curl -s --connect-timeout 5 \
-      https://api.github.com/repos/daeuniverse/daed/releases \
-      | grep -o '"tag_name": *"v[0-9]*\.[0-9]*\.[0-9]*"' \
-      | head -1 | grep -o 'v[^\"]*' 2>/dev/null || echo ""
-  fi
+  curl -s --connect-timeout 5 \
+    https://api.github.com/repos/guochan2019/onekey-daed/releases/latest \
+    | grep -o '"tag_name": *"[^"]*"' | head -1 | grep -o '"[^"]*"$' | tr -d '"' 2>/dev/null || echo ""
 }
 
 # ---------- 获取当前版本 ----------
@@ -80,8 +53,7 @@ get_current_ver() {
   if [ ! -f "$BIN" ]; then
     echo ""; return
   fi
-  # daed version 输出格式: "daed version v1.27.0"
-  "$BIN" version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
+  "$BIN" version 2>/dev/null | head -1 || echo ""
 }
 
 # ---------- 检测 kernel 是否满足 eBPF 要求 ----------
@@ -93,22 +65,19 @@ check_kernel() {
     err "内核版本过低 ($(uname -r))，daed 需要 Linux 5.17+"
   fi
 
-  # 关键 eBPF 内核配置检查（仅当可读取内核配置时）
   local missing=""
   for cfg in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_DEBUG_INFO_BTF; do
     if zgrep -q "${cfg}=y" /proc/config.gz 2>/dev/null || \
        grep -q "${cfg}=y" /boot/config-$(uname -r) 2>/dev/null; then
-      :  # 配置已启用
+      :
     else
       missing="$missing $cfg"
     fi
   done
   if [ -n "$missing" ]; then
     if [ -f /proc/config.gz ] || [ -f "/boot/config-$(uname -r)" ]; then
-      # 配置文件存在但缺少选项 → 硬错误
       err "内核缺少必要 eBPF 配置:$missing\n  请确认内核编译时启用了这些选项"
     else
-      # 配置文件不可读（如 LXC 容器），仅警告
       warn "无法读取内核配置（LXC 容器常见），跳过 eBPF 配置检查"
       warn "  如果 daed 启动失败，请确认宿主机内核启用了上述 eBPF 选项"
     fi
@@ -142,17 +111,15 @@ do_install() {
   DAED_VER="$1"
   DAED_ARCH="$2"
 
-  # 检查内核是否满足 eBPF 要求
   check_kernel
 
-  # 检查依赖：GEO 数据由 mosdns 提供
   if [ ! -f "/usr/share/v2ray/geoip.dat" ] || [ ! -f "/usr/share/v2ray/geosite.dat" ]; then
     err "未检测到 mosdns 的 GEO 数据 (/usr/share/v2ray/geoip.dat)\n  daed 需要依赖 mosdns，请先安装 onekey-mosdns"
   fi
 
   info "=== 1/5 安装系统依赖 ==="
   apt update -qq
-  apt install -y -qq wget unzip curl
+  apt install -y -qq wget curl
 
   info "=== 2/5 获取 daed ==="
   if [ -n "$LOCAL_BIN" ]; then
@@ -160,32 +127,12 @@ do_install() {
     cp "$LOCAL_BIN" "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
-  elif [ "$DAED_SRC" = "self" ]; then
-    # 归一化架构名：CI 产物的命名是 daed-linux-x86_64 / daed-linux-arm64
-    case "$DAED_ARCH" in
-      x86_64*)  DL_ARCH="x86_64"  ;;
-      arm64)    DL_ARCH="arm64"    ;;
-      *)        DL_ARCH="$DAED_ARCH" ;;
-    esac
-    info "  → 从本仓库 release 下载: ${DAED_VER} (${DL_ARCH})"
-    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DL_ARCH}" -O "$BIN"
+  else
+    info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
+    DOWNLOAD_URL="https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}"
+    wget -q "$DOWNLOAD_URL" -O "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
-  else
-    DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
-    TMPDIR=$(mktemp -d)
-    cd "$TMPDIR"
-    wget -q "$DOWNLOAD_URL" -O daed.zip
-    unzip -q daed.zip
-    # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
-    BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
-    if [ -z "$BINARY_PATH" ]; then
-      err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
-    fi
-    install -m 755 "$BINARY_PATH" "$BIN"
-    chmod +x "$BIN"
-    rm -rf "$TMPDIR"
-    "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
   fi
 
   info "=== 3/5 创建目录结构 ==="
@@ -204,26 +151,21 @@ Wants=network-online.target
 [Service]
 Type=simple
 
-# 资源限制
 MemoryHigh=512M
 LimitNPROC=4096
 LimitNOFILE=1048576
 OOMScoreAdjust=-100
 
-# 启动命令：挂载 BPF 文件系统（LXC 中需先创建目录） + 清理残留网络命名空间
 ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens'
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
-# 环境变量：GEO 数据路径
 Environment=DAED_GEOIP_DAT=/usr/share/v2ray/geoip.dat
 Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
 
-# 重启策略
 Restart=on-failure
 RestartSec=5
 
-# 超时（eBPF 加载可能需要较长时间）
 TimeoutStartSec=120
 TimeoutStopSec=30
 
@@ -278,30 +220,12 @@ do_upgrade() {
     cp "$LOCAL_BIN" "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
-  elif [ "$DAED_SRC" = "self" ]; then
-    # 归一化架构名：CI 产物的命名是 daed-linux-x86_64 / daed-linux-arm64
-    case "$DAED_ARCH" in
-      x86_64*)  DL_ARCH="x86_64"  ;;
-      arm64)    DL_ARCH="arm64"    ;;
-      *)        DL_ARCH="$DAED_ARCH" ;;
-    esac
-    info "  → 从本仓库 release 下载: ${DAED_VER} (${DL_ARCH})"
-    wget -q "https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DL_ARCH}" -O "$BIN"
+  else
+    info "  → 从本仓库 release 下载: ${DAED_VER} (${DAED_ARCH})"
+    DOWNLOAD_URL="https://github.com/guochan2019/onekey-daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}"
+    wget -q "$DOWNLOAD_URL" -O "$BIN"
     chmod +x "$BIN"
     DAED_VER=$("$BIN" --version 2>/dev/null | head -1 || echo "$DAED_VER")
-  else
-    DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
-    TMPDIR=$(mktemp -d)
-    cd "$TMPDIR"
-    wget -q "$DOWNLOAD_URL" -O daed.zip
-    unzip -q daed.zip
-    BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
-    if [ -z "$BINARY_PATH" ]; then
-      err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
-    fi
-    install -m 755 "$BINARY_PATH" "$BIN"
-    chmod +x "$BIN"
-    rm -rf "$TMPDIR"
   fi
 
   systemctl restart daed
