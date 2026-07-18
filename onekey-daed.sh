@@ -12,6 +12,10 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 是否以 root 运行" >&2' ERR
 # ---------- 配置 ----------
 FALLBACK_VER="v1.28.0"
+# 支持使用本地预制二进制（如 OpenWrt 编译的），跳过 GitHub 下载
+# 用法: DAED_BIN=/path/to/daed bash onekey-daed.sh
+LOCAL_BIN="${DAED_BIN:-}"
+[ -n "$LOCAL_BIN" ] && warn "使用本地二进制: ${LOCAL_BIN}"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
@@ -140,20 +144,27 @@ do_install() {
   apt install -y -qq wget unzip curl
 
   info "=== 2/5 下载 daed ${DAED_VER} (${DAED_ARCH}) ==="
-  DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
-  TMPDIR=$(mktemp -d)
-  cd "$TMPDIR"
-  wget -q "$DOWNLOAD_URL" -O daed.zip
-  unzip -q daed.zip
-  # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
-  BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
-  if [ -z "$BINARY_PATH" ]; then
-    err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+  if [ -n "$LOCAL_BIN" ]; then
+    info "  → 使用本地二进制: ${LOCAL_BIN}"
+    cp "$LOCAL_BIN" "$BIN"
+    chmod +x "$BIN"
+    DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
+  else
+    DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
+    TMPDIR=$(mktemp -d)
+    cd "$TMPDIR"
+    wget -q "$DOWNLOAD_URL" -O daed.zip
+    unzip -q daed.zip
+    # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
+    BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
+    if [ -z "$BINARY_PATH" ]; then
+      err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+    fi
+    install -m 755 "$BINARY_PATH" "$BIN"
+    chmod +x "$BIN"
+    rm -rf "$TMPDIR"
+    "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
   fi
-  install -m 755 "$BINARY_PATH" "$BIN"
-  chmod +x "$BIN"
-  rm -rf "$TMPDIR"
-  "$BIN" version 2>/dev/null | head -1 || info "  ✓ daed 已安装"
 
   info "=== 3/5 创建目录结构 ==="
   mkdir -p "$INSTALL_DIR"
@@ -240,19 +251,25 @@ do_upgrade() {
   CURRENT_VER="$3"
 
   info "=== 升级 daed: ${CURRENT_VER:-未知} → ${DAED_VER} ==="
-  DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
-  TMPDIR=$(mktemp -d)
-  cd "$TMPDIR"
-  wget -q "$DOWNLOAD_URL" -O daed.zip
-  unzip -q daed.zip
-  # zip 内带一层目录，二进制文件名 = daed-linux-{arch}
-  BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
-  if [ -z "$BINARY_PATH" ]; then
-    err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+  if [ -n "$LOCAL_BIN" ]; then
+    info "  → 使用本地二进制: ${LOCAL_BIN}"
+    cp "$LOCAL_BIN" "$BIN"
+    chmod +x "$BIN"
+    DAED_VER=$("$BIN" --version 2>/dev/null || "$BIN" version 2>/dev/null || echo "自定义")
+  else
+    DOWNLOAD_URL="https://github.com/daeuniverse/daed/releases/download/${DAED_VER}/daed-linux-${DAED_ARCH}.zip"
+    TMPDIR=$(mktemp -d)
+    cd "$TMPDIR"
+    wget -q "$DOWNLOAD_URL" -O daed.zip
+    unzip -q daed.zip
+    BINARY_PATH=$(find . -type f \( -name "daed-linux-*" -o -name "daed" \) ! -name "*.zip" ! -name "*.service" ! -name "*.desktop" ! -name "*.conf" ! -name "*.yaml" 2>/dev/null | head -1)
+    if [ -z "$BINARY_PATH" ]; then
+      err "未找到 daed 二进制文件\n  $(ls -la 2>/dev/null | head -10)"
+    fi
+    install -m 755 "$BINARY_PATH" "$BIN"
+    chmod +x "$BIN"
+    rm -rf "$TMPDIR"
   fi
-  install -m 755 "$BINARY_PATH" "$BIN"
-  chmod +x "$BIN"
-  rm -rf "$TMPDIR"
 
   systemctl restart daed
   info "  ✓ daed 已升级到 ${DAED_VER} 并重启"
@@ -300,14 +317,18 @@ case "$ACTION" in
     exit 0
     ;;
   1|"")
-    LATEST_VER=$(fetch_latest_ver)
-    if [ -z "$LATEST_VER" ]; then
-      LATEST_VER="$FALLBACK_VER"
-      warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
+    if [ -n "$LOCAL_BIN" ]; then
+      LATEST_VER="local"
+    else
+      LATEST_VER=$(fetch_latest_ver)
+      if [ -z "$LATEST_VER" ]; then
+        LATEST_VER="$FALLBACK_VER"
+        warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
+      fi
     fi
 
     if [ "$INSTALLED" = true ]; then
-      if [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" = "$LATEST_VER" ]; then
+      if [ -z "$LOCAL_BIN" ] && [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" = "$LATEST_VER" ]; then
         info "当前版本: ${CURRENT_VER}"
         info "✓ 已是最新版本"
         exit 0
