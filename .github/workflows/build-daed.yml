@@ -9,37 +9,65 @@ permissions:
   contents: write
 
 env:
-  # QiuSimons 最新版本锁定（从 daed/Makefile 提取）
-  DAED_COMMIT: 671e65d2fdcd62fe6a3ec18ecda209c5addea898
-  WING_COMMIT: dc50308
-  CORE_COMMIT: 09c6c8c
   PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
+  resolve:
+    name: Resolve QiuSimons versions
+    runs-on: ubuntu-24.04
+    outputs:
+      daed_commit: ${{ steps.parse.outputs.daed_commit }}
+      wing_commit: ${{ steps.parse.outputs.wing_commit }}
+      core_commit: ${{ steps.parse.outputs.core_commit }}
+      full_version: ${{ steps.parse.outputs.full_version }}
+    steps:
+      - name: Checkout QiuSimons/luci-app-daed
+        uses: actions/checkout@v4
+        with:
+          repository: QiuSimons/luci-app-daed
+          ref: kix
+          path: qiurepo
+          fetch-depth: 1
+
+      - name: Parse Makefile for commit hashes
+        id: parse
+        run: |
+          MAKEFILE=qiurepo/daed/Makefile
+          DAED_VER=$(grep '^DAED_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # daed-671e65d
+          WING_VER=$(grep '^WING_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # wing-dc50308
+          CORE_VER=$(grep '^CORE_VERSION:=' "$MAKEFILE" | cut -d= -f2)        # core-09c6c8c
+          DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2) # full sha
+          echo "daed_commit=${DAED_HASH}" >> $GITHUB_OUTPUT
+          echo "wing_commit=${WING_VER#wing-}" >> $GITHUB_OUTPUT
+          echo "core_commit=${CORE_VER#core-}" >> $GITHUB_OUTPUT
+          echo "full_version=${DAED_VER}_${WING_VER}_${CORE_VER}" >> $GITHUB_OUTPUT
+          echo "Using: ${DAED_VER}_${WING_VER}_${CORE_VER}"
+
   build:
     name: Build daed (x86_64)
     runs-on: ubuntu-24.04
+    needs: resolve
     steps:
-      - name: Checkout daed source (daeuniverse/daed @ QiuSimons 锁定 commit)
+      - name: Checkout daed source
         uses: actions/checkout@v4
         with:
           repository: daeuniverse/daed
-          ref: ${{ env.DAED_COMMIT }}
+          ref: ${{ needs.resolve.outputs.daed_commit }}
           fetch-depth: 0
 
-      - name: Checkout dae-wing @ ${{ env.WING_COMMIT }}
+      - name: Checkout dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
         uses: actions/checkout@v4
         with:
           repository: daeuniverse/dae-wing
-          ref: ${{ env.WING_COMMIT }}
+          ref: ${{ needs.resolve.outputs.wing_commit }}
           path: wing
           fetch-depth: 0
 
-      - name: Checkout dae-core @ ${{ env.CORE_COMMIT }}
+      - name: Checkout dae-core @ ${{ needs.resolve.outputs.core_commit }}
         uses: actions/checkout@v4
         with:
           repository: daeuniverse/dae
-          ref: ${{ env.CORE_COMMIT }}
+          ref: ${{ needs.resolve.outputs.core_commit }}
           path: wing/dae-core
           fetch-depth: 0
 
@@ -91,7 +119,7 @@ jobs:
       - name: Generate version string (match QiuSimons format)
         id: version
         run: |
-          echo "full_version=daed-${DAED_COMMIT:0:7}_wing-${WING_COMMIT}_core-${CORE_COMMIT}" >> $GITHUB_OUTPUT
+          echo "full_version=${{ needs.resolve.outputs.full_version }}" >> $GITHUB_OUTPUT
 
       - name: Build daed binary
         run: |
@@ -135,7 +163,9 @@ jobs:
   release:
     name: Create release
     runs-on: ubuntu-24.04
-    needs: build
+    needs:
+      - build
+      - resolve
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -154,9 +184,9 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
           body: |
-            Built from daeuniverse/daed @ ${{ env.DAED_COMMIT }}
-            Built from daeuniverse/dae-wing @ ${{ env.WING_COMMIT }}
-            Built from daeuniverse/dae @ ${{ env.CORE_COMMIT }}
+            Built from daeuniverse/daed @ ${{ needs.resolve.outputs.daed_commit }}
+            Built from daeuniverse/dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
+            Built from daeuniverse/dae @ ${{ needs.resolve.outputs.core_commit }}
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
