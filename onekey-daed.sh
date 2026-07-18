@@ -12,10 +12,6 @@ trap 'echo -e "\033[0;31m[ERROR] 脚本执行失败，请检查:\033[0m
   - 是否以 root 运行" >&2' ERR
 # ---------- 配置 ----------
 FALLBACK_VER="v1.28.0"
-# 支持使用本地预制二进制（如 OpenWrt 编译的），跳过 GitHub 下载
-# 用法: DAED_BIN=/path/to/daed bash onekey-daed.sh
-LOCAL_BIN="${DAED_BIN:-}"
-[ -n "$LOCAL_BIN" ] && warn "使用本地二进制: ${LOCAL_BIN}"
 INSTALL_DIR="/opt/daed"
 BIN="/usr/local/bin/daed"
 CONF_DIR="/opt/daed"
@@ -30,6 +26,11 @@ err()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 if [ "$(id -u)" -ne 0 ]; then
   err "请以 root 用户运行 (当前非 root)"
 fi
+
+# 支持使用本地预制二进制（如 OpenWrt 编译的），跳过 GitHub 下载
+# 用法: DAED_BIN=/path/to/daed bash onekey-daed.sh
+LOCAL_BIN="${DAED_BIN:-}"
+[ -n "$LOCAL_BIN" ] && warn "使用本地二进制: ${LOCAL_BIN}"
 
 # ---------- 检测架构 ----------
 detect_arch() {
