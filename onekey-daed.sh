@@ -258,34 +258,45 @@ fi
 
 echo ""
 echo "请选择操作："
-echo "  1. 安装 / 升级 daed"
-echo "  2. 卸载 daed"
+echo "  1. 安装 / 升级 daed（云编译版）"
+echo "  2. 安装 / 升级 daed（本地二进制文件）"
+echo "  3. 卸载 daed"
 echo "  0. 退出"
 echo ""
-read -p "请输入选项 (0-2): " ACTION
+read -p "请输入选项 (0-3): " ACTION
 echo ""
 
 case "$ACTION" in
-  2)
+  3)
     uninstall_daed
     ;;
   0)
     info "已退出"
     exit 0
     ;;
-  1|"")
-    if [ -n "$LOCAL_BIN" ]; then
-      LATEST_VER="local"
+  2)
+    # 本地二进制模式：用户输入路径
+    read -p "请输入本地 daed 二进制文件路径: " LOCAL_PATH
+    if [ ! -f "$LOCAL_PATH" ]; then
+      err "文件不存在: ${LOCAL_PATH}"
+    fi
+    LOCAL_BIN="$LOCAL_PATH"
+    LATEST_VER="local"
+    if [ "$INSTALLED" = true ]; then
+      do_upgrade "$LATEST_VER" "$DAED_ARCH" "$CURRENT_VER"
     else
-      LATEST_VER=$(fetch_latest_ver)
-      if [ -z "$LATEST_VER" ]; then
-        LATEST_VER="$FALLBACK_VER"
-        warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
-      fi
+      do_install "$LATEST_VER" "$DAED_ARCH"
+    fi
+    ;;
+  1|"")
+    LATEST_VER=$(fetch_latest_ver)
+    if [ -z "$LATEST_VER" ]; then
+      LATEST_VER="$FALLBACK_VER"
+      warn "GitHub API 不可用，使用后备版本 ${FALLBACK_VER}"
     fi
 
     if [ "$INSTALLED" = true ]; then
-      if [ -z "$LOCAL_BIN" ] && [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" = "$LATEST_VER" ]; then
+      if [ -n "$CURRENT_VER" ] && [ "$CURRENT_VER" = "$LATEST_VER" ]; then
         info "当前版本: ${CURRENT_VER}"
         info "✓ 已是最新版本"
         exit 0
