@@ -2,11 +2,6 @@ name: Build daed binary
 
 on:
   workflow_dispatch:
-    inputs:
-      version_override:
-        description: 'Override version string (leave empty for auto)'
-        required: false
-        type: string
   schedule:
     - cron: '0 0 * * 0'
 
@@ -14,28 +9,43 @@ permissions:
   contents: write
 
 env:
-  DAED_REPO: daeuniverse/daed
-  DAED_BRANCH: main
+  # QiuSimons 最新版本锁定（从 daed/Makefile 提取）
+  DAED_COMMIT: 671e65d2fdcd62fe6a3ec18ecda209c5addea898
+  WING_COMMIT: dc50308
+  CORE_COMMIT: 09c6c8c
+  PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
   build:
-    name: Build daed (${{ matrix.arch.name }})
+    name: Build daed (x86_64)
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        arch:
-          - name: x86_64
-            goarch: amd64
-
     steps:
-      - name: Checkout daed source
+      - name: Checkout daed source (daeuniverse/daed @ QiuSimons 锁定 commit)
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.DAED_REPO }}
-          ref: ${{ env.DAED_BRANCH }}
-          submodules: recursive
+          repository: daeuniverse/daed
+          ref: ${{ env.DAED_COMMIT }}
           fetch-depth: 0
+
+      - name: Checkout dae-wing @ ${{ env.WING_COMMIT }}
+        uses: actions/checkout@v4
+        with:
+          repository: daeuniverse/dae-wing
+          ref: ${{ env.WING_COMMIT }}
+          path: wing
+          fetch-depth: 0
+
+      - name: Checkout dae-core @ ${{ env.CORE_COMMIT }}
+        uses: actions/checkout@v4
+        with:
+          repository: daeuniverse/dae
+          ref: ${{ env.CORE_COMMIT }}
+          path: wing/dae-core
+          fetch-depth: 0
+
+      - name: Init dae-core submodules
+        run: |
+          cd wing/dae-core && git submodule update --init
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -48,7 +58,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install system deps (LLVM/Clang for eBPF)
+      - name: Install system deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq llvm-15 clang-15 make
@@ -61,45 +71,64 @@ jobs:
       - name: Build web frontend
         run: |
           pnpm install --no-frozen-lockfile
-          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build
-          if [ -d "apps/web/dist" ] && [ ! -d "dist" ]; then
-            cp -r apps/web/dist dist
-          fi
+          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
+          mkdir -p wing/webrender/web
+          cp -r apps/web/dist/* wing/webrender/web/
+          # gzip large files (match QiuSimons' process)
+          find wing/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '
+            gzip -9 -k "{}"
+            if [ "$(stat -c %s {})" -lt "$(stat -c %s {}.gz)" ]; then
+              rm "{}.gz"
+            else
+              rm "{}"
+            fi
+          ' ';'
 
-      - name: Generate version
+      - name: Download PGO profile
+        run: |
+          wget -qO wing/default.pgo "${{ env.PGO_URL }}"
+
+      - name: Generate version string (match QiuSimons format)
         id: version
         run: |
-          # 从 apps/web/package.json 取前端版本号
-          WEB_VER=$(grep '"version"' apps/web/package.json | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-          DAED_COMMIT=$(git rev-parse --short HEAD)
-          cd wing
-          WING_COMMIT=$(git rev-parse --short HEAD)
-          cd dae-core
-          CORE_COMMIT=$(git rev-parse --short HEAD)
-          cd ../..
-          echo "version=${WEB_VER}" >> $GITHUB_OUTPUT
-          echo "full_version=daed-${DAED_COMMIT}_wing-${WING_COMMIT}_core-${CORE_COMMIT}" >> $GITHUB_OUTPUT
+          echo "full_version=daed-${DAED_COMMIT:0:7}_wing-${WING_COMMIT}_core-${CORE_COMMIT}" >> $GITHUB_OUTPUT
 
       - name: Build daed binary
         run: |
           cd wing
-          make deps
-          make bundle APPNAME=daed VERSION=${{ steps.version.outputs.full_version }} \
-            OUTPUT=../daed-${{ matrix.arch.name }} \
-            WEB_DIST=$(realpath ../dist)
+          # go get -u=patch && go mod tidy (match QiuSimons)
+          cd dae-core
+          go get -u=patch; go mod tidy
+          cd ..
+          go get -u=patch; go mod tidy
+          # generate schema + eBPF
+          export GOFLAGS="-trimpath -buildvcs=false -pgo=auto"
+          go generate ./...
+          # build eBPF in dae-core
+          cd dae-core
+          export BPF_CLANG=clang-15 BPF_CFLAGS="-O2 -Wall -Werror -DMAX_MATCH_SET_LEN=1024" BPF_TARGET="bpfel,bpfeb" BPF_TRACE_TARGET="amd64"
+          go generate ./control/control.go
+          go generate ./trace/trace.go
+          cd ..
+          # compile final binary with embedallowed + trace tags
+          go build -tags="embedallowed,trace" \
+            -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
+            -o ../daed-x86_64 \
+            -trimpath -buildvcs=false -pgo=auto .
+          cd ..
 
       - name: Verify binary
         run: |
-          file daed-${{ matrix.arch.name }}
-          chmod +x daed-${{ matrix.arch.name }}
-          ./daed-${{ matrix.arch.name }} --version || true
-          ls -lh daed-${{ matrix.arch.name }}
+          file daed-x86_64
+          chmod +x daed-x86_64
+          ./daed-x86_64 --version
+          ls -lh daed-x86_64
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: daed-linux-${{ matrix.arch.name }}
-          path: daed-${{ matrix.arch.name }}
+          name: daed-linux-x86_64
+          path: daed-x86_64
           if-no-files-found: error
           retention-days: 7
 
@@ -114,32 +143,20 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: List artifacts
-        run: ls -lah artifacts/
-
       - name: Generate release tag
         id: meta
         run: |
-          DATE=$(date +%Y%m%d)
-          echo "tag=daed_build_${DATE}" >> $GITHUB_OUTPUT
+          echo "tag=daed_build_$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Create or update release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
           body: |
-            Auto-built daed from [${{ env.DAED_REPO }}](https://github.com/${{ env.DAED_REPO }}) main branch.
-
-            ## Files
-            - `daed-linux-x86_64` — x86_64 (AMD64)
-            - `daed-linux-arm64` — ARM64 (AArch64)
-
-            ## Usage
-            ```bash
-            wget -qO /usr/local/bin/daed https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/daed-linux-x86_64
-            chmod +x /usr/local/bin/daed
-            ```
+            Built from daeuniverse/daed @ ${{ env.DAED_COMMIT }}
+            Built from daeuniverse/dae-wing @ ${{ env.WING_COMMIT }}
+            Built from daeuniverse/dae @ ${{ env.CORE_COMMIT }}
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
