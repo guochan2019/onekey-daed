@@ -9,6 +9,7 @@ permissions:
   contents: write
 
 env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
   PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
