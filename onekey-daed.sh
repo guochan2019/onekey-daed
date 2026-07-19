@@ -169,7 +169,8 @@ Type=simple
 LimitCORE=infinity
 LimitNOFILE=infinity
 
-ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens'
+ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
+ExecStopPost=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
 # Debian 特有：GEO 数据路径（OpenWrt 由包管理器处理）
@@ -178,7 +179,7 @@ Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
 
 # 对齐 QiuSimons：procd respawn → 任何退出都重启
 Restart=always
-RestartSec=0
+RestartSec=2
 
 StandardOutput=append:/var/log/daed/daed.log
 StandardError=append:/var/log/daed/daed.log
