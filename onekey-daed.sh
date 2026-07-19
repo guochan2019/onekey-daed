@@ -168,7 +168,7 @@ Type=simple
 # 对齐 QiuSimons + 硬上限防止 OOM 崩溃
 LimitCORE=infinity
 LimitNOFILE=infinity
-MemoryMax=2G
+MemoryMax=1G
 
 ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
