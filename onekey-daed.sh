@@ -155,6 +155,12 @@ do_install() {
   fi
 
   info "=== 4/5 创建 systemd 服务 ==="
+  # 在启动前延迟 20 秒，确保网络就绪
+  mkdir -p /etc/systemd/system/daed.service.d
+  cat > /etc/systemd/system/daed.service.d/delay.conf << 'EOF'
+[Service]
+ExecStartPre=/bin/sleep 20
+EOF
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
 Description=daed - Modern web dashboard for dae
