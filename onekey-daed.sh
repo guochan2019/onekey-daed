@@ -169,6 +169,7 @@ Type=simple
 LimitCORE=infinity
 LimitNOFILE=infinity
 
+ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStopPost=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStart=/usr/local/bin/daed run -c /opt/daed
