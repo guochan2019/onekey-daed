@@ -165,9 +165,10 @@ Documentation=https://github.com/QiuSimons/luci-app-daed
 [Service]
 Type=simple
 
-# 对齐 QiuSimons：无内存限制 / 无 BPF 预挂载 / unlimited core+nofile
+# 对齐 QiuSimons + 硬上限防止 OOM 崩溃
 LimitCORE=infinity
 LimitNOFILE=infinity
+MemoryMax=2G
 
 ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
