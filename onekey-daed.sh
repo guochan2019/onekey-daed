@@ -280,7 +280,7 @@ echo "  2. 安装 / 升级 daed（本地二进制文件）"
 echo "  3. 卸载 daed"
 echo "  0. 退出"
 echo ""
-read -p "请输入选项 (0-3): " ACTION
+read -p "请输入选项 (0-3): " ACTION </dev/tty
 echo ""
 
 case "$ACTION" in
@@ -293,7 +293,7 @@ case "$ACTION" in
     ;;
   2)
     # 本地二进制模式：用户输入路径
-    read -p "请输入本地 daed 二进制文件路径: " LOCAL_PATH
+    read -p "请输入本地 daed 二进制文件路径: " LOCAL_PATH </dev/tty
     if [ ! -f "$LOCAL_PATH" ]; then
       err "文件不存在: ${LOCAL_PATH}"
     fi
