@@ -155,39 +155,30 @@ do_install() {
   fi
 
   info "=== 4/5 创建 systemd 服务 ==="
-  # 在启动前延迟 20 秒，确保网络就绪
-  mkdir -p /etc/systemd/system/daed.service.d
-  cat > /etc/systemd/system/daed.service.d/delay.conf << 'EOF'
-[Service]
-ExecStartPre=/bin/sleep 20
-EOF
+  # 启动延迟（由用户通过 systemd drop-in 自主决定是否需要）
+
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
-Description=daed - Modern web dashboard for dae
-Documentation=https://github.com/daeuniverse/daed
-After=network-online.target
-Wants=network-online.target
+Description=daed - A modern dashboard for dae
+Documentation=https://github.com/QiuSimons/luci-app-daed
 
 [Service]
 Type=simple
 
-MemoryHigh=512M
-LimitNPROC=4096
-LimitNOFILE=1048576
-OOMScoreAdjust=-100
+# 对齐 QiuSimons：无内存限制 / 无 BPF 预挂载 / unlimited core+nofile
+LimitCORE=infinity
+LimitNOFILE=infinity
 
-ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null || true'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens'
 ExecStart=/usr/local/bin/daed run -c /opt/daed
 
+# Debian 特有：GEO 数据路径（OpenWrt 由包管理器处理）
 Environment=DAED_GEOIP_DAT=/usr/share/v2ray/geoip.dat
 Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
 
-Restart=on-failure
-RestartSec=5
-
-TimeoutStartSec=120
-TimeoutStopSec=30
+# 对齐 QiuSimons：procd respawn → 任何退出都重启
+Restart=always
+RestartSec=0
 
 StandardOutput=append:/var/log/daed/daed.log
 StandardError=append:/var/log/daed/daed.log
