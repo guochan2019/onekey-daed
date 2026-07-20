@@ -76,6 +76,7 @@ jobs:
           repository: daeuniverse/daed
           ref: ${{ needs.resolve.outputs.daed_commit }}
           fetch-depth: 0
+          clean: false
 
       - name: Checkout dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
         uses: actions/checkout@v4
