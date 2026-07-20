@@ -117,38 +117,28 @@ jobs:
           path: qiurepo
           fetch-depth: 1
 
-      - name: Apply QiuSimons patches
+      - name: Apply QiuSimons patches (before go generate)
         run: |
           set -e
           PATCHDIR="$PWD/qiurepo/patchset"
-
-          apply_patch() {
-            local patch="$1" label="$2"
-            shift 2
-            echo "=== $patch ==="
-            (
-              cd "$@"
-              git apply --ignore-whitespace -v "$PATCHDIR/$patch" 2>&1 || return 1
-            )
-            echo "  → applied ($label)"
-            return 0
-          }
-
           cd wing
 
-          # build_fixes.patch — 全部在 wing/，直接打
-          apply_patch "build_fixes.patch" "wing/"
+          echo "=== kix-bind_fix.patch ==="
+          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-bind_fix.patch"
+          echo "  → applied to dae-core/"
 
-          # 其余补丁全部在 dae-core/（含 git format-patch 生成的邮件头），从 dae-core/ 打
-          for p in kix-bind_fix.patch kix-feat_DNS_high_concurrency_optimization.patch kix-feat_lockless_concurrency_udp_dns.patch; do
-            apply_patch "$p" "wing/dae-core/" "dae-core"
-          done
+          echo "=== kix-feat_DNS_high_concurrency_optimization.patch ==="
+          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-feat_DNS_high_concurrency_optimization.patch"
+          echo "  → applied to dae-core/"
 
-          # 0001-fix-runtime-stats.patch — 路径有 dae-core/ 前缀，需要去掉
+          echo "=== kix-feat_lockless_concurrency_udp_dns.patch ==="
+          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-feat_lockless_concurrency_udp_dns.patch"
+          echo "  → applied to dae-core/"
+
           echo "=== 0001-fix-runtime-stats.patch ==="
           sed 's|^\(---\|\+\+\+\) [ab]/dae-core/|\1 a/|' "$PATCHDIR/0001-fix-runtime-stats.patch" \
             | git -C dae-core apply --ignore-whitespace -v
-          echo "  → applied (wing/dae-core/, prefix stripped)"
+          echo "  → applied to dae-core/ (prefix stripped)"
 
       - name: Build web frontend
         run: |
@@ -170,7 +160,7 @@ jobs:
         run: |
           echo "full_version=${{ needs.resolve.outputs.full_version }}" >> $GITHUB_OUTPUT
 
-      - name: Build daed binary
+      - name: Go generate (creates graphql + eBPF files)
         run: |
           cd wing
           cd dae-core
@@ -179,6 +169,16 @@ jobs:
           go get -u=patch; go mod tidy
           export GOFLAGS="-trimpath -buildvcs=false"
           go generate ./...
+
+      - name: Apply build_fixes patch (after go generate creates graphql files)
+        run: |
+          cd wing
+          git apply --ignore-whitespace -v "$PWD/../qiurepo/patchset/build_fixes.patch"
+          echo "  → applied to wing/ (graphql generated files)"
+
+      - name: Build daed binary
+        run: |
+          cd wing
           cd dae-core
           export BPF_CLANG=clang-15 BPF_CFLAGS="-O2 -Wall -Werror -DMAX_MATCH_SET_LEN=1024" BPF_TARGET="bpfel,bpfeb" BPF_TRACE_TARGET="amd64"
           go generate ./control/control.go
