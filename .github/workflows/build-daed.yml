@@ -10,7 +10,6 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
   resolve:
@@ -63,6 +62,14 @@ jobs:
     runs-on: ubuntu-24.04
     needs: resolve
     steps:
+      - name: Checkout QiuSimons/luci-app-daed (for patches)
+        uses: actions/checkout@v4
+        with:
+          repository: QiuSimons/luci-app-daed
+          ref: kix
+          path: qiurepo
+          fetch-depth: 1
+
       - name: Checkout daed source
         uses: actions/checkout@v4
         with:
@@ -89,6 +96,38 @@ jobs:
       - name: Init dae-core submodules
         run: |
           cd wing/dae-core && git submodule update --init
+
+      - name: Apply QiuSimons patches
+        run: |
+          PATCHDIR=../qiurepo/patchset
+          cd wing
+
+          # 补丁可能同时修改 wing/ 和 wing/dae-core/，尝试两个位置
+          for p in "$PATCHDIR"/*.patch; do
+            echo "=== Applying: $(basename $p) ==="
+
+            # 尝试从 wing/ 根目录打
+            if git apply --ignore-whitespace "$p" 2>/dev/null; then
+              echo "  → applied from wing/"
+              continue
+            fi
+
+            # 尝试从 wing/dae-core/ 打（去掉 a/ 前缀的 dae-core/）
+            if git -C dae-core apply --ignore-whitespace "$p" 2>/dev/null; then
+              echo "  → applied from wing/dae-core/"
+              continue
+            fi
+
+            # 尝试从 wing/dae-core/ 打（去掉 a/dae-core/ 前缀）
+            if sed 's|^\(---\|+++\) a/dae-core/|\1 a/|' "$p" | \
+               git -C dae-core apply --ignore-whitespace 2>/dev/null; then
+              echo "  → applied from wing/dae-core/ (stripped dae-core/ prefix)"
+              continue
+            fi
+
+            echo "  ⚠ FAILED to apply: $(basename $p)"
+            exit 1
+          done
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -127,10 +166,6 @@ jobs:
             fi
           ' ';'
 
-      - name: Download PGO profile
-        run: |
-          wget -qO wing/default.pgo "${{ env.PGO_URL }}"
-
       - name: Generate version string (match QiuSimons format)
         id: version
         run: |
@@ -145,7 +180,7 @@ jobs:
           cd ..
           go get -u=patch; go mod tidy
           # generate schema + eBPF
-          export GOFLAGS="-trimpath -buildvcs=false -pgo=auto"
+          export GOFLAGS="-trimpath -buildvcs=false"
           go generate ./...
           # build eBPF in dae-core
           cd dae-core
@@ -157,8 +192,7 @@ jobs:
           go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64 \
-            -trimpath -buildvcs=false -pgo=auto .
-          cd ..
+            -trimpath -buildvcs=false .
 
       - name: Verify binary
         run: |
@@ -202,6 +236,7 @@ jobs:
             Built from daeuniverse/daed @ ${{ needs.resolve.outputs.daed_commit }}
             Built from daeuniverse/dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
             Built from daeuniverse/dae @ ${{ needs.resolve.outputs.core_commit }}
+            Applied QiuSimons patches: 0001-fix-runtime-stats, build_fixes, kix-bind_fix, kix-feat_DNS_high_concurrency_optimization, kix-feat_lockless_concurrency_udp_dns
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
