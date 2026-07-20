@@ -99,35 +99,45 @@ jobs:
 
       - name: Apply QiuSimons patches
         run: |
-          PATCHDIR=../qiurepo/patchset
+          set -e
           cd wing
 
-          # 补丁可能同时修改 wing/ 和 wing/dae-core/，尝试两个位置
-          for p in "$PATCHDIR"/*.patch; do
+          # 复制补丁到当前目录
+          cp -r ../qiurepo/patchset ../patchset
+
+          # 用 patch -p1 逐个尝试，先试 wing/ 再试 dae-core/
+          for p in ../patchset/*.patch; do
             echo "=== Applying: $(basename $p) ==="
 
-            # 尝试从 wing/ 根目录打
-            if git apply --ignore-whitespace "$p" 2>/dev/null; then
+            # 先试从 wing/ 打
+            if patch -f -p1 --dry-run < "$p" 2>/dev/null; then
+              patch -f -p1 < "$p"
               echo "  → applied from wing/"
               continue
             fi
 
-            # 尝试从 wing/dae-core/ 打（去掉 a/ 前缀的 dae-core/）
-            if git -C dae-core apply --ignore-whitespace "$p" 2>/dev/null; then
+            # 试从 dae-core/ 打（如果有 dae-core/ 前缀，用 -p2）
+            if patch -f -p2 --dry-run < "$p" 2>/dev/null; then
+              patch -f -p2 < "$p"
+              echo "  → applied from wing/ (p2)"
+              continue
+            fi
+
+            # 试从 dae-core/ 打
+            cd dae-core
+            if patch -f -p1 --dry-run < "../$p" 2>/dev/null; then
+              patch -f -p1 < "../$p"
               echo "  → applied from wing/dae-core/"
+              cd ..
               continue
             fi
+            cd ..
 
-            # 尝试从 wing/dae-core/ 打（去掉 a/dae-core/ 前缀）
-            if sed 's|^\(---\|+++\) a/dae-core/|\1 a/|' "$p" | \
-               git -C dae-core apply --ignore-whitespace 2>/dev/null; then
-              echo "  → applied from wing/dae-core/ (stripped dae-core/ prefix)"
-              continue
-            fi
-
-            echo "  ⚠ FAILED to apply: $(basename $p)"
+            echo "  ⚠ FAILED: $(basename $p)"
             exit 1
           done
+
+          rm -rf ../patchset
 
       - name: Setup Go
         uses: actions/setup-go@v5
