@@ -174,18 +174,15 @@ MemoryMax=1G
 ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStopPost=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
-ExecStart=/usr/local/bin/daed run -c /opt/daed
+ExecStart=/usr/local/bin/daed run -c /opt/daed --logfile /var/log/daed/daed.log --logfile-maxsize 5 --logfile-maxbackups 1
 
 # Debian 特有：GEO 数据路径（OpenWrt 由包管理器处理）
 Environment=DAED_GEOIP_DAT=/usr/share/v2ray/geoip.dat
 Environment=DAED_GEOSITE_DAT=/usr/share/v2ray/geosite.dat
 
-# 对齐 QiuSimons：procd respawn → 任何退出都重启
-Restart=always
-RestartSec=2
-
-StandardOutput=append:/var/log/daed/daed.log
-StandardError=append:/var/log/daed/daed.log
+# 对齐 QiuSimons：procd respawn → 崩溃时重启，不循环重试
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
