@@ -135,19 +135,17 @@ jobs:
           def section_groups(patch_path):
               """Split a patch into per-file sections."""
               with open(patch_path) as f:
-                  lines = f.readlines()
-              sections = []
-              current = []
-              for line in lines:
-                  if line.startswith("diff --git"):
-                      if current:
-                          sections.append(current)
-                      current = [line]
-                  else:
-                      current.append(line)
-              if current:
-                  sections.append(current)
-              return [''.join(s) for s in sections]
+                  content = f.read()
+              # Skip everything before the first diff --git
+              if "diff --git" not in content:
+                  return [content]
+              content = content[content.index("diff --git"):]
+              sections = content.split("\ndiff --git ")
+              # Re-add the diff --git prefix (except for the first one)
+              result = [sections[0]]
+              for s in sections[1:]:
+                  result.append("diff --git " + s)
+              return result
 
           for p in patches:
               pname = os.path.basename(p)
