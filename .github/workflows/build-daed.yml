@@ -124,20 +124,21 @@ jobs:
           cd wing
 
           echo "=== kix-bind_fix.patch ==="
-          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-bind_fix.patch"
+          patch -d dae-core -p1 -f -s --fuzz=3 < "$PATCHDIR/kix-bind_fix.patch"
           echo "  → applied to dae-core/"
 
           echo "=== kix-feat_DNS_high_concurrency_optimization.patch ==="
-          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-feat_DNS_high_concurrency_optimization.patch"
+          patch -d dae-core -p1 -f -s --fuzz=3 < "$PATCHDIR/kix-feat_DNS_high_concurrency_optimization.patch"
           echo "  → applied to dae-core/"
 
           echo "=== kix-feat_lockless_concurrency_udp_dns.patch ==="
-          git -C dae-core apply --ignore-whitespace -v "$PATCHDIR/kix-feat_lockless_concurrency_udp_dns.patch"
+          patch -d dae-core -p1 -f -s --fuzz=3 < "$PATCHDIR/kix-feat_lockless_concurrency_udp_dns.patch"
           echo "  → applied to dae-core/"
 
           echo "=== 0001-fix-runtime-stats.patch ==="
+          # 去掉 dae-core/ 前缀
           sed 's|^\(---\|\+\+\+\) [ab]/dae-core/|\1 a/|' "$PATCHDIR/0001-fix-runtime-stats.patch" \
-            | git -C dae-core apply --ignore-whitespace -v
+            | patch -d dae-core -p1 -f -s --fuzz=3
           echo "  → applied to dae-core/ (prefix stripped)"
 
       - name: Build web frontend
@@ -173,7 +174,7 @@ jobs:
       - name: Apply build_fixes patch (after go generate creates graphql files)
         run: |
           cd wing
-          git apply --ignore-whitespace -v "$PWD/../qiurepo/patchset/build_fixes.patch"
+          patch -p1 -f -s --fuzz=3 < "$PWD/../qiurepo/patchset/build_fixes.patch"
           echo "  → applied to wing/ (graphql generated files)"
 
       - name: Build daed binary
