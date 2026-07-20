@@ -162,22 +162,20 @@ do_install() {
 [Unit]
 Description=daed - A modern dashboard for dae
 Documentation=https://github.com/daeuniverse/daed
-After=network-online.target
-Wants=network-online.target
+After=network.target
 
 [Service]
 Type=simple
-LimitNOFILE=1048576
-MemoryHigh=512M
-OOMScoreAdjust=-100
+LimitCORE=infinity
+LimitNOFILE=infinity
+MemoryMax=1G
+Environment=DAE_LOCATION_ASSET=/usr/share/v2ray
 ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStopPost=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStart=/usr/local/bin/daed run -c /opt/daed --logfile /var/log/daed/daed.log --logfile-maxsize 5 --logfile-maxbackups 1
 Restart=on-failure
-RestartSec=5
-TimeoutStartSec=120
-TimeoutStopSec=30
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
