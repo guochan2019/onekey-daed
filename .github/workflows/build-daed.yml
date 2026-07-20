@@ -100,7 +100,7 @@ jobs:
       - name: Apply QiuSimons patches
         run: |
           python3 << 'PYEOF'
-          import subprocess, os, glob
+          import subprocess, os, glob, re
 
           os.chdir("wing")
           patches = sorted(glob.glob("../qiurepo/patchset/*.patch"))
@@ -114,7 +114,6 @@ jobs:
                   # Read patch, strip prefix from paths
                   with open(patch_path) as f:
                       content = f.read()
-                  import re
                   content = re.sub(
                       rf'^(---|\+\+\+) [ab]/{re.escape(strip_path)}/',
                       r'\1 a/',
