@@ -160,17 +160,17 @@ do_install() {
 
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
-Description=daed - A modern dashboard for dae
-Documentation=https://github.com/daeuniverse/daed
+Description=daed - Modern Dashboard For dae
 After=network.target
 
 [Service]
 Type=simple
 LimitCORE=infinity
 LimitNOFILE=infinity
-MemoryMax=1G
+MemoryMax=2G
 Environment=DAE_LOCATION_ASSET=/usr/share/v2ray
-ExecStartPre=/bin/sh -c 'mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf 2>/dev/null; exit 0'
+Environment=GOMEMLIMIT=1400MiB
+ExecStartPre=/bin/sh -c 'mountpoint -q /sys/fs/bpf || { mkdir -p /sys/fs/bpf && mount -t bpf bpf /sys/fs/bpf; }; exit 0'
 ExecStartPre=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStopPost=/bin/sh -c 'ip netns delete daens 2>/dev/null; rm -f /run/netns/daens; exit 0'
 ExecStart=/usr/local/bin/daed run -c /opt/daed --logfile /var/log/daed/daed.log --logfile-maxsize 5 --logfile-maxbackups 1
