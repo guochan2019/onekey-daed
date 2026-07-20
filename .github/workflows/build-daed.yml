@@ -10,7 +10,6 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
   resolve:
@@ -40,7 +39,6 @@ jobs:
           DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
           WING_SHORT=${WING_VER#wing-}
           CORE_SHORT=${CORE_VER#core-}
-          # 短 SHA 不足以让 checkout action 使用，通过 GitHub API 补齐完整 SHA
           resolve_sha() {
             local repo="$1" short="$2"
             curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -111,13 +109,53 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm@10.24.0
 
+      - name: Checkout QiuSimons patches
+        uses: actions/checkout@v4
+        with:
+          repository: QiuSimons/luci-app-daed
+          ref: kix
+          path: qiurepo
+          fetch-depth: 1
+
+      - name: Apply QiuSimons patches
+        run: |
+          set -e
+          PATCHDIR="$PWD/qiurepo/patchset"
+
+          apply_patch() {
+            local patch="$1" label="$2"
+            shift 2
+            echo "=== $patch ==="
+            (
+              cd "$@"
+              git apply --ignore-whitespace -v "$PATCHDIR/$patch" 2>&1 || return 1
+            )
+            echo "  → applied ($label)"
+            return 0
+          }
+
+          cd wing
+
+          # build_fixes.patch — 全部在 wing/，直接打
+          apply_patch "build_fixes.patch" "wing/"
+
+          # 其余补丁全部在 dae-core/（含 git format-patch 生成的邮件头），从 dae-core/ 打
+          for p in kix-bind_fix.patch kix-feat_DNS_high_concurrency_optimization.patch kix-feat_lockless_concurrency_udp_dns.patch; do
+            apply_patch "$p" "wing/dae-core/" "dae-core"
+          done
+
+          # 0001-fix-runtime-stats.patch — 路径有 dae-core/ 前缀，需要去掉
+          echo "=== 0001-fix-runtime-stats.patch ==="
+          sed 's|^\(---\|\+\+\+\) [ab]/dae-core/|\1 a/|' "$PATCHDIR/0001-fix-runtime-stats.patch" \
+            | git -C dae-core apply --ignore-whitespace -v
+          echo "  → applied (wing/dae-core/, prefix stripped)"
+
       - name: Build web frontend
         run: |
           pnpm install --no-frozen-lockfile
           TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
           mkdir -p wing/webrender/web
           cp -r apps/web/dist/* wing/webrender/web/
-          # gzip large files (match QiuSimons' process)
           find wing/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '
             gzip -9 -k "{}"
             if [ "$(stat -c %s {})" -lt "$(stat -c %s {}.gz)" ]; then
@@ -127,11 +165,7 @@ jobs:
             fi
           ' ';'
 
-      - name: Download PGO profile
-        run: |
-          wget -qO wing/default.pgo "${{ env.PGO_URL }}"
-
-      - name: Generate version string (match QiuSimons format)
+      - name: Generate version string
         id: version
         run: |
           echo "full_version=${{ needs.resolve.outputs.full_version }}" >> $GITHUB_OUTPUT
@@ -139,26 +173,21 @@ jobs:
       - name: Build daed binary
         run: |
           cd wing
-          # go get -u=patch && go mod tidy (match QiuSimons)
           cd dae-core
           go get -u=patch; go mod tidy
           cd ..
           go get -u=patch; go mod tidy
-          # generate schema + eBPF
-          export GOFLAGS="-trimpath -buildvcs=false -pgo=auto"
+          export GOFLAGS="-trimpath -buildvcs=false"
           go generate ./...
-          # build eBPF in dae-core
           cd dae-core
           export BPF_CLANG=clang-15 BPF_CFLAGS="-O2 -Wall -Werror -DMAX_MATCH_SET_LEN=1024" BPF_TARGET="bpfel,bpfeb" BPF_TRACE_TARGET="amd64"
           go generate ./control/control.go
           go generate ./trace/trace.go
           cd ..
-          # compile final binary with embedallowed + trace tags
           go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64 \
-            -trimpath -buildvcs=false -pgo=auto .
-          cd ..
+            -trimpath -buildvcs=false .
 
       - name: Verify binary
         run: |
@@ -202,6 +231,7 @@ jobs:
             Built from daeuniverse/daed @ ${{ needs.resolve.outputs.daed_commit }}
             Built from daeuniverse/dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
             Built from daeuniverse/dae @ ${{ needs.resolve.outputs.core_commit }}
+            Applied QiuSimons patches: 0001-fix-runtime-stats, build_fixes, kix-bind_fix, kix-feat_DNS_high_concurrency_optimization, kix-feat_lockless_concurrency_udp_dns
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
