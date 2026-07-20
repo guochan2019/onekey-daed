@@ -34,9 +34,8 @@ jobs:
       - name: Verify binary
         run: |
           file /tmp/daed-bin
-          chmod +x /tmp/daed-bin
           /tmp/daed-bin --help 2>&1 | head -3
-
+          ls -lh /tmp/daed-bin
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
