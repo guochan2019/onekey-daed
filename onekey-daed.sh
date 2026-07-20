@@ -161,7 +161,7 @@ do_install() {
   cat > /etc/systemd/system/daed.service << 'SERVICEEOF'
 [Unit]
 Description=daed - A modern dashboard for dae
-Documentation=GitHub - QiuSimons/luci-app-daed
+Documentation=https://github.com/daeuniverse/daed
 After=network.target
 
 [Service]
