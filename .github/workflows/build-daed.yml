@@ -27,6 +27,7 @@ jobs:
             apk add -q apk-tools
             mkdir -p /extract
             apk extract /data/daed.apk --destination /extract --allow-untrusted
+            chmod +x /extract/usr/bin/daed
             cp /extract/usr/bin/daed /data/daed-bin
           "
 
