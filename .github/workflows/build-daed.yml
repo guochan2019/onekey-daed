@@ -99,45 +99,131 @@ jobs:
 
       - name: Apply QiuSimons patches
         run: |
-          set -e
-          cd wing
+          python3 << 'PYEOF'
+          import subprocess, os, glob
 
-          # 复制补丁到当前目录
-          cp -r ../qiurepo/patchset ../patchset
+          os.chdir("wing")
+          patches = sorted(glob.glob("../qiurepo/patchset/*.patch"))
+          if not patches:
+              print("No patches found!")
+              exit(1)
 
-          # 用 patch -p1 逐个尝试，先试 wing/ 再试 dae-core/
-          for p in ../patchset/*.patch; do
-            echo "=== Applying: $(basename $p) ==="
+          def apply_patch(patch_path, cwd, strip_path=None):
+              """Try to apply a patch file from a given directory. Optionally strip a path prefix."""
+              if strip_path:
+                  # Read patch, strip prefix from paths
+                  with open(patch_path) as f:
+                      content = f.read()
+                  import re
+                  content = re.sub(
+                      rf'^(---|\+\+\+) [ab]/{re.escape(strip_path)}/',
+                      r'\1 a/',
+                      content,
+                      flags=re.MULTILINE
+                  )
+                  result = subprocess.run(
+                      ["git", "apply", "--ignore-whitespace", "-v", "-"],
+                      input=content, capture_output=True, text=True, cwd=cwd
+                  )
+              else:
+                  result = subprocess.run(
+                      ["git", "apply", "--ignore-whitespace", "-v", patch_path],
+                      capture_output=True, text=True, cwd=cwd
+                  )
+              return result
 
-            # 先试从 wing/ 打
-            if patch -f -p1 --dry-run < "$p" 2>/dev/null; then
-              patch -f -p1 < "$p"
-              echo "  → applied from wing/"
-              continue
-            fi
+          def section_groups(patch_path):
+              """Split a patch into per-file sections."""
+              with open(patch_path) as f:
+                  lines = f.readlines()
+              sections = []
+              current = []
+              for line in lines:
+                  if line.startswith("diff --git"):
+                      if current:
+                          sections.append(current)
+                      current = [line]
+                  else:
+                      current.append(line)
+              if current:
+                  sections.append(current)
+              return [''.join(s) for s in sections]
 
-            # 试从 dae-core/ 打（如果有 dae-core/ 前缀，用 -p2）
-            if patch -f -p2 --dry-run < "$p" 2>/dev/null; then
-              patch -f -p2 < "$p"
-              echo "  → applied from wing/ (p2)"
-              continue
-            fi
+          for p in patches:
+              pname = os.path.basename(p)
+              print(f"=== {pname} ===")
 
-            # 试从 dae-core/ 打
-            cd dae-core
-            if patch -f -p1 --dry-run < "../$p" 2>/dev/null; then
-              patch -f -p1 < "../$p"
-              echo "  → applied from wing/dae-core/"
-              cd ..
-              continue
-            fi
-            cd ..
+              sections = section_groups(p)
+              if len(sections) <= 1:
+                  # Single-file patch: try wing/ then dae-core/
+                  for cwd in [".", "dae-core"]:
+                      r = apply_patch(p, cwd)
+                      if r.returncode == 0:
+                          print(f"  → applied to {'wing/' if cwd == '.' else 'wing/dae-core/'}")
+                          break
+                      # If only 'No such file', try again with stripped prefix
+                      if "No such file" in r.stderr:
+                          # Try stripping dae-core/ prefix
+                          r2 = apply_patch(p, cwd, strip_path="dae-core")
+                          if r2.returncode == 0:
+                              print(f"  → applied to wing/dae-core/ (stripped dae-core/)")
+                              break
+                  else:
+                      # Last resort: apply to both, ignore failures
+                      apply_patch(p, ".", "dae-core")
+                      apply_patch(p, "dae-core")
+                      print(f"  → applied (multi-target)")
+              else:
+                  # Multi-file patch: apply each section to the right directory
+                  any_fail = False
+                  for section in sections:
+                      # Extract the target path from diff --git line
+                      diff_line = [l for l in section.split('\n') if l.startswith('diff --git')][0]
+                      # Get the file path (after 'b/')
+                      target_path = diff_line.split(' b/')[-1]
+                      
+                      # Try wing/
+                      r = subprocess.run(
+                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
+                          input=section, capture_output=True, text=True, cwd="."
+                      )
+                      if r.returncode == 0:
+                          print(f"  {target_path}: → wing/ ✓")
+                          continue
+                      
+                      # Try dae-core/
+                      r = subprocess.run(
+                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
+                          input=section, capture_output=True, text=True, cwd="dae-core"
+                      )
+                      if r.returncode == 0:
+                          print(f"  {target_path}: → dae-core/ ✓")
+                          continue
+                      
+                      # Try with dae-core/ prefix stripped
+                      section_stripped = re.sub(
+                          r'^(---|\+\+\+) [ab]/dae-core/',
+                          r'\1 a/',
+                          section,
+                          flags=re.MULTILINE
+                      )
+                      r = subprocess.run(
+                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
+                          input=section_stripped, capture_output=True, text=True, cwd="dae-core"
+                      )
+                      if r.returncode == 0:
+                          print(f"  {target_path}: → dae-core/ (stripped) ✓")
+                          continue
+                      
+                      print(f"  {target_path}: ✗ FAILED")
+                      print(f"    stderr: {r.stderr[:200]}")
+                      any_fail = True
+                  
+                  if any_fail:
+                      exit(1)
+                  print(f"  → all sections applied")
 
-            echo "  ⚠ FAILED: $(basename $p)"
-            exit 1
-          done
-
-          rm -rf ../patchset
+          PYEOF
 
       - name: Setup Go
         uses: actions/setup-go@v5
