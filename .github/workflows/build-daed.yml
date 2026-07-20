@@ -10,6 +10,7 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
   resolve:
@@ -89,139 +90,6 @@ jobs:
         run: |
           cd wing/dae-core && git submodule update --init
 
-      - name: Checkout QiuSimons patches (keep last to avoid cleanup)
-        uses: actions/checkout@v4
-        with:
-          repository: QiuSimons/luci-app-daed
-          ref: kix
-          path: qiurepo
-          fetch-depth: 1
-
-      - name: Apply QiuSimons patches
-        run: |
-          python3 << 'PYEOF'
-          import subprocess, os, glob, re
-
-          os.chdir("wing")
-          patches = sorted(glob.glob("../qiurepo/patchset/*.patch"))
-          if not patches:
-              print("No patches found!")
-              exit(1)
-
-          def apply_patch(patch_path, cwd, strip_path=None):
-              """Try to apply a patch file from a given directory. Optionally strip a path prefix."""
-              if strip_path:
-                  # Read patch, strip prefix from paths
-                  with open(patch_path) as f:
-                      content = f.read()
-                  content = re.sub(
-                      rf'^(---|\+\+\+) [ab]/{re.escape(strip_path)}/',
-                      r'\1 a/',
-                      content,
-                      flags=re.MULTILINE
-                  )
-                  result = subprocess.run(
-                      ["git", "apply", "--ignore-whitespace", "-v", "-"],
-                      input=content, capture_output=True, text=True, cwd=cwd
-                  )
-              else:
-                  result = subprocess.run(
-                      ["git", "apply", "--ignore-whitespace", "-v", patch_path],
-                      capture_output=True, text=True, cwd=cwd
-                  )
-              return result
-
-          def section_groups(patch_path):
-              """Split a patch into per-file sections."""
-              with open(patch_path) as f:
-                  content = f.read()
-              # Skip everything before the first diff --git
-              if "diff --git" not in content:
-                  return [content]
-              content = content[content.index("diff --git"):]
-              sections = content.split("\ndiff --git ")
-              # Re-add the diff --git prefix (except for the first one)
-              result = [sections[0]]
-              for s in sections[1:]:
-                  result.append("diff --git " + s)
-              return result
-
-          for p in patches:
-              pname = os.path.basename(p)
-              print(f"=== {pname} ===")
-
-              sections = section_groups(p)
-              if len(sections) <= 1:
-                  # Single-file patch: try wing/ then dae-core/
-                  for cwd in [".", "dae-core"]:
-                      r = apply_patch(p, cwd)
-                      if r.returncode == 0:
-                          print(f"  → applied to {'wing/' if cwd == '.' else 'wing/dae-core/'}")
-                          break
-                      # If only 'No such file', try again with stripped prefix
-                      if "No such file" in r.stderr:
-                          # Try stripping dae-core/ prefix
-                          r2 = apply_patch(p, cwd, strip_path="dae-core")
-                          if r2.returncode == 0:
-                              print(f"  → applied to wing/dae-core/ (stripped dae-core/)")
-                              break
-                  else:
-                      # Last resort: apply to both, ignore failures
-                      apply_patch(p, ".", "dae-core")
-                      apply_patch(p, "dae-core")
-                      print(f"  → applied (multi-target)")
-              else:
-                  # Multi-file patch: apply each section to the right directory
-                  any_fail = False
-                  for section in sections:
-                      # Extract the target path from diff --git line
-                      diff_line = [l for l in section.split('\n') if l.startswith('diff --git')][0]
-                      # Get the file path (after 'b/')
-                      target_path = diff_line.split(' b/')[-1]
-                      
-                      # Try wing/
-                      r = subprocess.run(
-                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
-                          input=section, capture_output=True, text=True, cwd="."
-                      )
-                      if r.returncode == 0:
-                          print(f"  {target_path}: → wing/ ✓")
-                          continue
-                      
-                      # Try dae-core/
-                      r = subprocess.run(
-                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
-                          input=section, capture_output=True, text=True, cwd="dae-core"
-                      )
-                      if r.returncode == 0:
-                          print(f"  {target_path}: → dae-core/ ✓")
-                          continue
-                      
-                      # Try with dae-core/ prefix stripped
-                      section_stripped = re.sub(
-                          r'^(---|\+\+\+) [ab]/dae-core/',
-                          r'\1 a/',
-                          section,
-                          flags=re.MULTILINE
-                      )
-                      r = subprocess.run(
-                          ["git", "apply", "--ignore-whitespace", "-v", "-"],
-                          input=section_stripped, capture_output=True, text=True, cwd="dae-core"
-                      )
-                      if r.returncode == 0:
-                          print(f"  {target_path}: → dae-core/ (stripped) ✓")
-                          continue
-                      
-                      print(f"  {target_path}: ✗ FAILED")
-                      print(f"    stderr: {r.stderr[:200]}")
-                      any_fail = True
-                  
-                  if any_fail:
-                      exit(1)
-                  print(f"  → all sections applied")
-
-          PYEOF
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -259,6 +127,10 @@ jobs:
             fi
           ' ';'
 
+      - name: Download PGO profile
+        run: |
+          wget -qO wing/default.pgo "${{ env.PGO_URL }}"
+
       - name: Generate version string (match QiuSimons format)
         id: version
         run: |
@@ -273,7 +145,7 @@ jobs:
           cd ..
           go get -u=patch; go mod tidy
           # generate schema + eBPF
-          export GOFLAGS="-trimpath -buildvcs=false"
+          export GOFLAGS="-trimpath -buildvcs=false -pgo=auto"
           go generate ./...
           # build eBPF in dae-core
           cd dae-core
@@ -285,7 +157,8 @@ jobs:
           go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64 \
-            -trimpath -buildvcs=false .
+            -trimpath -buildvcs=false -pgo=auto .
+          cd ..
 
       - name: Verify binary
         run: |
@@ -329,7 +202,6 @@ jobs:
             Built from daeuniverse/daed @ ${{ needs.resolve.outputs.daed_commit }}
             Built from daeuniverse/dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
             Built from daeuniverse/dae @ ${{ needs.resolve.outputs.core_commit }}
-            Applied QiuSimons patches: 0001-fix-runtime-stats, build_fixes, kix-bind_fix, kix-feat_DNS_high_concurrency_optimization, kix-feat_lockless_concurrency_udp_dns
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
