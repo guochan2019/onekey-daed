@@ -10,60 +10,91 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  PGO_URL: https://github.com/QiuSimons/luci-app-dae/raw/refs/heads/kix/dae/pprof/default.pgo
 
 jobs:
   resolve:
-    name: Resolve daed version
+    name: Resolve QiuSimons versions
     runs-on: ubuntu-24.04
     outputs:
-      daed_commit: ${{ steps.latest.outputs.commit }}
-      full_version: ${{ steps.latest.outputs.version }}
+      daed_commit: ${{ steps.parse.outputs.daed_commit }}
+      wing_commit: ${{ steps.parse.outputs.wing_commit }}
+      core_commit: ${{ steps.parse.outputs.core_commit }}
+      full_version: ${{ steps.parse.outputs.full_version }}
     steps:
-      - name: Get latest daed commit
-        id: latest
+      - name: Checkout QiuSimons/luci-app-daed
+        uses: actions/checkout@v4
+        with:
+          repository: QiuSimons/luci-app-daed
+          ref: kix
+          path: qiurepo
+          fetch-depth: 1
+
+      - name: Parse Makefile for commit hashes
+        id: parse
         run: |
-          COMMIT=$(curl -s "https://api.github.com/repos/QiuSimons/luci-app-daed/commits/kix" \
-            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])")
-          SHORT=$(echo $COMMIT | cut -c1-7)
-          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
-          echo "version=daed-${SHORT}" >> $GITHUB_OUTPUT
-          echo "Using QiuSimons/luci-app-daed @ ${SHORT}"
+          MAKEFILE=qiurepo/daed/Makefile
+          DAED_VER=$(grep '^DAED_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          WING_VER=$(grep '^WING_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          CORE_VER=$(grep '^CORE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
+          WING_SHORT=${WING_VER#wing-}
+          CORE_SHORT=${CORE_VER#core-}
+          # 短 SHA 不足以让 checkout action 使用，通过 GitHub API 补齐完整 SHA
+          resolve_sha() {
+            local repo="$1" short="$2"
+            curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${repo}/commits/${short}" \
+              | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha',''))"
+          }
+          WING_FULL=$(resolve_sha daeuniverse/dae-wing "$WING_SHORT")
+          CORE_FULL=$(resolve_sha daeuniverse/dae "$CORE_SHORT")
+          echo "daed_commit=${DAED_HASH}" >> $GITHUB_OUTPUT
+          echo "wing_commit=${WING_FULL}" >> $GITHUB_OUTPUT
+          echo "core_commit=${CORE_FULL}" >> $GITHUB_OUTPUT
+          echo "full_version=${DAED_VER}_${WING_VER}_${CORE_VER}" >> $GITHUB_OUTPUT
+          echo "Using: ${DAED_VER}_${WING_VER}_${CORE_VER}"
+          echo "  daed: ${DAED_HASH:0:7}"
+          echo "  wing: ${WING_SHORT} -> ${WING_FULL}"
+          echo "  core: ${CORE_SHORT} -> ${CORE_FULL}"
 
   build:
     name: Build daed (x86_64)
     runs-on: ubuntu-24.04
     needs: resolve
     steps:
-      - name: Checkout QiuSimons/luci-app-daed (patches + daed source)
-        uses: actions/checkout@v4
-        with:
-          repository: QiuSimons/luci-app-daed
-          ref: kix
-          path: qiurepo
-          fetch-depth: 0
-
-      - name: Extract daed commit from Makefile
-        id: makefile
-        run: |
-          MAKEFILE=qiurepo/daed/Makefile
-          DAED_HASH=$(grep '^PKG_SOURCE_VERSION:=' "$MAKEFILE" | cut -d= -f2)
-          echo "hash=${DAED_HASH}" >> $GITHUB_OUTPUT
-          echo "Using daed @ ${DAED_HASH:0:7}"
-
-      - name: Checkout official daed source with submodules
+      - name: Checkout daed source
         uses: actions/checkout@v4
         with:
           repository: daeuniverse/daed
-          ref: ${{ steps.makefile.outputs.hash }}
-          path: daed-src
+          ref: ${{ needs.resolve.outputs.daed_commit }}
           fetch-depth: 0
-          submodules: recursive
+
+      - name: Checkout dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
+        uses: actions/checkout@v4
+        with:
+          repository: daeuniverse/dae-wing
+          ref: ${{ needs.resolve.outputs.wing_commit }}
+          path: wing
+          fetch-depth: 0
+
+      - name: Checkout dae-core @ ${{ needs.resolve.outputs.core_commit }}
+        uses: actions/checkout@v4
+        with:
+          repository: daeuniverse/dae
+          ref: ${{ needs.resolve.outputs.core_commit }}
+          path: wing/dae-core
+          fetch-depth: 0
+
+      - name: Init dae-core submodules
+        run: |
+          cd wing/dae-core && git submodule update --init
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '~1.22'
-          cache-dependency-path: daed-src/wing/go.sum
+          cache-dependency-path: wing/go.sum
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -73,44 +104,20 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq llvm-15 clang-15 make patch
+          sudo apt-get install -y -qq llvm-15 clang-15 make
           echo "CLANG=clang-15" >> $GITHUB_ENV
           echo "BPF_STRIP_FLAG=-no-strip" >> $GITHUB_ENV
 
       - name: Install pnpm
         run: npm install -g pnpm@10.24.0
 
-      - name: Apply all patches (to daed-src/wing)
-        run: |
-          cd daed-src/wing
-
-          # 复制补丁到本地
-          cp -r ../../qiurepo/patchset/*.patch .
-
-          # 用 openwrt 标准方法：patch -p1 --fuzz=3 从 wing/ 根目录打
-          for p in *.patch; do
-            echo "=== Applying: $p ==="
-            patch -p1 -f --fuzz=3 < "$p" 2>&1 || true
-            echo ""
-          done
-
-          # 检查是否有 .rej 文件（失败的 hunk）
-          REJ_COUNT=$(find . -name "*.rej" 2>/dev/null | wc -l)
-          if [ "$REJ_COUNT" -gt 0 ]; then
-            echo "⚠ $REJ_COUNT .rej files found (failed hunks):"
-            find . -name "*.rej"
-            echo "Build will continue with partial patches"
-          else
-            echo "✅ All patches applied cleanly"
-          fi
-
       - name: Build web frontend
         run: |
-          cd daed-src
           pnpm install --no-frozen-lockfile
           TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
           mkdir -p wing/webrender/web
           cp -r apps/web/dist/* wing/webrender/web/
+          # gzip large files (match QiuSimons' process)
           find wing/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '
             gzip -9 -k "{}"
             if [ "$(stat -c %s {})" -lt "$(stat -c %s {}.gz)" ]; then
@@ -120,43 +127,51 @@ jobs:
             fi
           ' ';'
 
-      - name: Generate version string
+      - name: Download PGO profile
+        run: |
+          wget -qO wing/default.pgo "${{ env.PGO_URL }}"
+
+      - name: Generate version string (match QiuSimons format)
         id: version
         run: |
-          echo "full_version=${{ steps.makefile.outputs.hash }}" >> $GITHUB_OUTPUT
-
-      - name: Go generate
-        run: |
-          cd daed-src/wing
-          go get -u=patch; go mod tidy
-          export GOFLAGS="-trimpath -buildvcs=false"
-          go generate ./...
+          echo "full_version=${{ needs.resolve.outputs.full_version }}" >> $GITHUB_OUTPUT
 
       - name: Build daed binary
         run: |
-          cd daed-src/wing
+          cd wing
+          # go get -u=patch && go mod tidy (match QiuSimons)
+          cd dae-core
+          go get -u=patch; go mod tidy
+          cd ..
+          go get -u=patch; go mod tidy
+          # generate schema + eBPF
+          export GOFLAGS="-trimpath -buildvcs=false -pgo=auto"
+          go generate ./...
+          # build eBPF in dae-core
           cd dae-core
           export BPF_CLANG=clang-15 BPF_CFLAGS="-O2 -Wall -Werror -DMAX_MATCH_SET_LEN=1024" BPF_TARGET="bpfel,bpfeb" BPF_TRACE_TARGET="amd64"
           go generate ./control/control.go
           go generate ./trace/trace.go
           cd ..
+          # compile final binary with embedallowed + trace tags
           go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64 \
-            -trimpath -buildvcs=false .
+            -trimpath -buildvcs=false -pgo=auto .
+          cd ..
 
       - name: Verify binary
         run: |
-          file daed-src/daed-linux-x86_64
-          chmod +x daed-src/daed-linux-x86_64
-          daed-src/daed-linux-x86_64 --version
-          ls -lh daed-src/daed-linux-x86_64
+          file daed-linux-x86_64
+          chmod +x daed-linux-x86_64
+          ./daed-linux-x86_64 --version
+          ls -lh daed-linux-x86_64
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: daed-linux-x86_64
-          path: daed-src/daed-linux-x86_64
+          path: daed-linux-x86_64
           if-no-files-found: error
           retention-days: 7
 
@@ -184,7 +199,9 @@ jobs:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
           body: |
-            Built from daeuniverse/daed submodules with QiuSimons patches
+            Built from daeuniverse/daed @ ${{ needs.resolve.outputs.daed_commit }}
+            Built from daeuniverse/dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
+            Built from daeuniverse/dae @ ${{ needs.resolve.outputs.core_commit }}
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
