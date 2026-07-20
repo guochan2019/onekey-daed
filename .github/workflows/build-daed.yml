@@ -26,7 +26,7 @@ jobs:
           docker run --rm -v /tmp:/data alpine:latest sh -c "
             apk add -q apk-tools
             mkdir -p /extract
-            apk extract /data/daed.apk --destination /extract
+            apk extract /data/daed.apk --destination /extract --allow-untrusted
             cp /extract/usr/bin/daed /data/daed-bin
           "
 
