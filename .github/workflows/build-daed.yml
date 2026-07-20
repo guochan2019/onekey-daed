@@ -62,21 +62,12 @@ jobs:
     runs-on: ubuntu-24.04
     needs: resolve
     steps:
-      - name: Checkout QiuSimons/luci-app-daed (for patches)
-        uses: actions/checkout@v4
-        with:
-          repository: QiuSimons/luci-app-daed
-          ref: kix
-          path: qiurepo
-          fetch-depth: 1
-
       - name: Checkout daed source
         uses: actions/checkout@v4
         with:
           repository: daeuniverse/daed
           ref: ${{ needs.resolve.outputs.daed_commit }}
           fetch-depth: 0
-          clean: false
 
       - name: Checkout dae-wing @ ${{ needs.resolve.outputs.wing_commit }}
         uses: actions/checkout@v4
@@ -97,6 +88,14 @@ jobs:
       - name: Init dae-core submodules
         run: |
           cd wing/dae-core && git submodule update --init
+
+      - name: Checkout QiuSimons patches (keep last to avoid cleanup)
+        uses: actions/checkout@v4
+        with:
+          repository: QiuSimons/luci-app-daed
+          ref: kix
+          path: qiurepo
+          fetch-depth: 1
 
       - name: Apply QiuSimons patches
         run: |
