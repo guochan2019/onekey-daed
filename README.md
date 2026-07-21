@@ -9,11 +9,8 @@
 > ⚠️ 需要 root 权限。内核需 **Linux 5.17+** 且启用 eBPF。
 
 ```bash
-# 方式一：一键直达（推荐）
+# 一键直达（推荐）
 bash <(wget -qO- https://raw.githubusercontent.com/guochan2019/onekey-daed/main/onekey-daed.sh)
-
-# 方式二：wget
-wget -qO- https://raw.githubusercontent.com/guochan2019/onekey-daed/main/onekey-daed.sh | bash
 ```
 
 ## 前置依赖
@@ -54,22 +51,20 @@ wget -qO- https://raw.githubusercontent.com/guochan2019/onekey-daed/main/onekey-
 
 ## 下载来源说明
 
-脚本内置两种获取 daed 二进制的方式，通过菜单选择：
-
 ### 1. 云编译版（默认）
 
-使用 GitHub Actions 从 [QiuSimons/luci-app-daed](https://github.com/QiuSimons/luci-app-daed) 锁定的源码编译，与 OpenWrt 编译版完全一致。编译完成后自动发布到本仓库 release，脚本自动下载：
+使用 GitHub Actions 从 [daeuniverse/daed](https://github.com/daeuniverse/daed) 官方仓库 main 分支编译，编译完成后自动发布到本仓库 release，脚本自动下载：
 
 ```bash
 bash onekey-daed.sh
 # 选 1
 ```
 
-触发编译：`Actions` → `Build daed binary` → `Run workflow`
+触发编译：`Actions` → `Build daed binary` → `Run workflow`（或每周日自动编译）
 
 ### 2. 本地二进制文件
 
-支持从 OpenWrt 编译环境或其它来源提取 daed 二进制：
+支持从其它来源获取 daed 二进制：
 
 ```bash
 bash onekey-daed.sh
@@ -90,9 +85,21 @@ DAED_BIN=/path/to/daed bash onekey-daed.sh
 | 检测 | 确认 mosdns GEO 数据存在 |
 | 1/5 | 安装依赖（wget、curl） |
 | 2/5 | 下载/使用 daed 二进制 |
-| 3/5 | 创建目录结构 |
+| 3/5 | 创建目录结构 + GEO 数据链接 |
 | 4/5 | 创建 systemd 服务 |
 | 5/5 | 启动 daed 服务 |
+
+## systemd 服务配置
+
+采用官方推荐参数，已针对非 Docker 环境做适配：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `LimitNPROC` | 512 | 限制最大线程数，防止内存泄漏累积 |
+| `LimitNOFILE` | 1048576 | 文件描述符上限 |
+| `MemoryMax` | 2G | 内存硬上限，兜底防止系统 OOM |
+| `Restart` | on-failure | 进程异常退出时自动拉起 |
+| `ExecStartPre` | mountpoint -q \|\| mount | 自动挂载 BPF 文件系统（LXC 需要） |
 
 ## 目录结构
 
