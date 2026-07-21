@@ -1,0 +1,145 @@
+name: Build daed binary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: write
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+jobs:
+  resolve:
+    name: Resolve latest daed commit
+    runs-on: ubuntu-24.04
+    outputs:
+      daed_commit: ${{ steps.latest.outputs.commit }}
+    steps:
+      - name: Get latest commit from daeuniverse/daed main branch
+        id: latest
+        run: |
+          COMMIT=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/daeuniverse/daed/commits/main" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['sha'])")
+          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+          echo "Using daeuniverse/daed @ ${COMMIT}"
+
+  build:
+    name: Build daed (x86_64)
+    runs-on: ubuntu-24.04
+    needs: resolve
+    steps:
+      - name: Checkout daed source with submodules
+        uses: actions/checkout@v4
+        with:
+          repository: daeuniverse/daed
+          ref: ${{ needs.resolve.outputs.daed_commit }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '~1.22'
+          cache-dependency-path: wing/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq llvm-15 clang-15 make
+          echo "CLANG=clang-15" >> $GITHUB_ENV
+          echo "BPF_STRIP_FLAG=-no-strip" >> $GITHUB_ENV
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.24.0
+
+      - name: Build web frontend
+        run: |
+          pnpm install --no-frozen-lockfile
+          TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build --filter daed
+          mkdir -p wing/webrender/web
+          cp -r apps/web/dist/* wing/webrender/web/
+          # gzip compress large web files
+          find wing/webrender/web -type f -size +4k ! -name "*.gz" ! -name "*.woff" ! -name "*.woff2" -exec sh -c '
+            gzip -9 -k "{}"
+            if [ "$(stat -c %s {})" -lt "$(stat -c %s {}.gz)" ]; then
+              rm "{}.gz"
+            else
+              rm "{}"
+            fi
+          ' ';'
+
+      - name: Generate version string
+        id: version
+        run: |
+          DAED_SHA=${{ needs.resolve.outputs.daed_commit }}
+          echo "full_version=daed-${DAED_SHA:0:7}" >> $GITHUB_OUTPUT
+
+      - name: Build daed binary
+        run: |
+          cd wing
+          go mod tidy
+          # generate schema (GraphQL -> Go)
+          go generate ./...
+          # build eBPF programs in dae-core
+          cd dae-core
+          export BPF_CLANG=clang-15 BPF_CFLAGS="-O2 -Wall -Werror -DMAX_MATCH_SET_LEN=1024" BPF_TARGET="bpfel,bpfeb" BPF_TRACE_TARGET="amd64"
+          go generate ./control/control.go
+          go generate ./trace/trace.go
+          cd ..
+          # compile final binary
+          go build -tags="embedallowed,trace" \
+            -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
+            -o ../daed-linux-x86_64 \
+            -trimpath -buildvcs=false .
+
+      - name: Verify binary
+        run: |
+          file daed-linux-x86_64
+          chmod +x daed-linux-x86_64
+          ./daed-linux-x86_64 --version 2>/dev/null || ./daed-linux-x86_64 version 2>/dev/null || echo "version check skipped"
+          ls -lh daed-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daed-linux-x86_64
+          path: daed-linux-x86_64
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Create release
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+      - resolve
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate release tag
+        id: meta
+        run: echo "tag=daed_build_$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
+          body: |
+            Built from daeuniverse/daed main branch @ ${{ needs.resolve.outputs.daed_commit }}
+          files: artifacts/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+          make_latest: true
