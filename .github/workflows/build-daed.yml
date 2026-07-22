@@ -40,11 +40,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Pin dae-core to QiuSimons locked version (09c6c8c)
+      - name: Pin dae-core to latest main
         run: |
           cd wing/dae-core
-          git fetch --depth 1 origin 09c6c8cadda8250fb5bc85d4b40510a9544b6235
-          git checkout 09c6c8c
+          git fetch --depth 1 origin main
+          git checkout origin/main
 
       - name: Setup Go
         uses: actions/setup-go@v5
