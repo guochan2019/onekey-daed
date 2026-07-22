@@ -42,7 +42,7 @@ jobs:
 
       - name: Pin dae-core to QiuSimons locked version
         run: |
-          git clone --depth 1 https://github.com/daeuniverse/dae.git /tmp/dae-core-pinned
+          git clone https://github.com/daeuniverse/dae.git /tmp/dae-core-pinned
           cd /tmp/dae-core-pinned && git checkout 09c6c8cadda8250fb5bc85d4b40510a9544b6235
           rm -rf wing/dae-core
           mkdir -p wing/dae-core
