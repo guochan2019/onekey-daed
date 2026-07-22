@@ -40,6 +40,12 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Pin dae-core to QiuSimons locked version
+        run: |
+          rm -rf wing/dae-core
+          git clone --depth 1 https://github.com/daeuniverse/dae.git wing/dae-core
+          cd wing/dae-core && git fetch --depth 1 origin 09c6c8c && git checkout 09c6c8c && rm -rf .git
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -140,6 +146,7 @@ jobs:
           name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
           body: |
             Built from daeuniverse/daed main branch @ ${{ needs.resolve.outputs.daed_commit }}
+            Pinned dae-core @ 09c6c8c (QiuSimons locked version)
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
