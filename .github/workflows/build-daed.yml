@@ -42,12 +42,11 @@ jobs:
 
       - name: Pin dae-core to QiuSimons locked version
         run: |
-          git clone https://github.com/daeuniverse/dae.git /tmp/dae-core-pinned
-          cd /tmp/dae-core-pinned && git checkout 09c6c8cadda8250fb5bc85d4b40510a9544b6235
+          curl -sL "https://github.com/daeuniverse/dae/archive/09c6c8cadda8250fb5bc85d4b40510a9544b6235.tar.gz" | tar xz -C /tmp/
           rm -rf wing/dae-core
           mkdir -p wing/dae-core
-          cp -r /tmp/dae-core-pinned/* wing/dae-core/
-          rm -rf /tmp/dae-core-pinned
+          cp -r /tmp/dae-09c6c8cadda8250fb5bc85d4b40510a9544b6235/* wing/dae-core/
+          rm -rf /tmp/dae-09c6c8cadda8250fb5bc85d4b40510a9544b6235
 
       - name: Setup Go
         uses: actions/setup-go@v5
