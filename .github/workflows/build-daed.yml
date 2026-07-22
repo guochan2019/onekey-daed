@@ -42,7 +42,11 @@ jobs:
 
       - name: Pin dae-core to QiuSimons locked version (09c6c8c)
         run: |
+          set -x
           cd wing/dae-core
+          pwd
+          ls -la .git
+          git remote -v
           git fetch --depth 1 origin 09c6c8c
           git checkout 09c6c8c
 
