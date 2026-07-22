@@ -40,13 +40,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Pin dae-core to QiuSimons locked version
+      - name: Pin dae-core to QiuSimons locked version (09c6c8c)
         run: |
-          curl -sL "https://github.com/daeuniverse/dae/archive/09c6c8cadda8250fb5bc85d4b40510a9544b6235.tar.gz" | tar xz -C /tmp/
-          rm -rf wing/dae-core
-          mkdir -p wing/dae-core
-          cp -r /tmp/dae-09c6c8cadda8250fb5bc85d4b40510a9544b6235/* wing/dae-core/
-          rm -rf /tmp/dae-09c6c8cadda8250fb5bc85d4b40510a9544b6235
+          cd wing/dae-core
+          git fetch --depth 1 origin 09c6c8c
+          git checkout 09c6c8c
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -148,7 +146,6 @@ jobs:
           name: "daed build ${{ github.run_number }} (${{ steps.meta.outputs.tag }})"
           body: |
             Built from daeuniverse/daed main branch @ ${{ needs.resolve.outputs.daed_commit }}
-            Pinned dae-core @ 09c6c8c (QiuSimons locked version)
           files: artifacts/*
           token: ${{ secrets.GITHUB_TOKEN }}
           make_latest: true
