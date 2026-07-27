@@ -97,7 +97,6 @@ DAED_BIN=/path/to/daed bash onekey-daed.sh
 |------|-----|------|
 | `LimitNPROC` | 512 | 限制最大线程数，防止内存泄漏累积 |
 | `LimitNOFILE` | 1048576 | 文件描述符上限 |
-| `MemoryMax` | 2G | 内存硬上限，兜底防止系统 OOM |
 | `Restart` | on-failure | 进程异常退出时自动拉起 |
 | `ExecStartPre` | mountpoint -q \|\| mount | 自动挂载 BPF 文件系统（LXC 需要） |
 
