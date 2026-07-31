@@ -1,6 +1,6 @@
 # onekey-daed
 
-一键在 Debian LXC 上部署 [daed](https://github.com/daeuniverse/daed) — dae 的现代化 Web 管理面板。
+一键在 Debian 13 上部署 [daed](https://github.com/daeuniverse/daed) — dae 的现代化 Web 管理面板。
 
 > 依赖 [onekey-mosdns](https://github.com/guochan2019/onekey-mosdns) 提供的 GEO 数据（`/usr/share/v2ray/`）。
 
