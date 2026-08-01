@@ -55,6 +55,13 @@ bash <(wget -qO- https://raw.githubusercontent.com/guochan2019/onekey-daed/main/
 
 使用 GitHub Actions 从 [daeuniverse/daed](https://github.com/daeuniverse/daed) 官方仓库 main 分支编译，编译完成后自动发布到本仓库 release，脚本自动下载：
 
+每次编译产出两个 x86_64 版本：
+
+- `daed-linux-x86_64` — 通用版
+- `daed-linux-x86_64_v3_avx2` — AVX2 优化版（`GOAMD64=v3` 编译）
+
+脚本按 CPU 指令集自动选择：支持 AVX2（2013+ 处理器）自动下载 v3 优化版，老 CPU 回退通用版。
+
 ```bash
 bash onekey-daed.sh
 # 选 1
@@ -138,7 +145,10 @@ bash onekey-daed.sh
 
 ## 架构支持
 
-x86_64 / arm64
+| 架构 | 二进制 | 说明 |
+|------|--------|------|
+| x86_64 | `daed-linux-x86_64` + `daed-linux-x86_64_v3_avx2` | 自动检测：AVX2（2013+）→ v3 优化版；否则回退通用版 |
+| arm64 | 需本地二进制（选 2） | 当前云编译仅产出 x86_64 |
 
 ## 许可证
 
