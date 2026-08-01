@@ -52,7 +52,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7.0.0
         with:
-          go-version: '~1.22'
+          go-version: '~1.26'
           cache-dependency-path: wing/go.sum
 
       - name: Setup Node.js
