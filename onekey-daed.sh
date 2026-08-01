@@ -36,7 +36,13 @@ LOCAL_BIN="${DAED_BIN:-}"
 # ---------- 检测架构 ----------
 detect_arch() {
   case "$(uname -m)" in
-    x86_64|amd64)  echo "x86_64"  ;;
+    x86_64|amd64)
+      if grep -q avx2 /proc/cpuinfo 2>/dev/null; then
+        echo "x86_64_v3_avx2"        # 2013+ Haswell 全部命中
+      else
+        echo "x86_64"                # 老 CPU 兜底通用版
+      fi
+      ;;
     aarch64|arm64) echo "arm64"    ;;
     *)             echo ""         ;;
   esac
