@@ -1,0 +1,82 @@
+name: Build daed Docker image
+
+on:
+  workflow_run:
+    workflows: ["Build daed binary"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  packages: write
+  contents: read
+
+concurrency:
+  group: daed-image-build
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve latest release
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      release_tag: ${{ steps.latest.outputs.tag }}
+      asset_url: ${{ steps.latest.outputs.url }}
+    steps:
+      - name: Get latest release of onekey-daed
+        id: latest
+        run: |
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/guochan2019/onekey-daed/releases/latest" \
+            | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)
+          asset = next(a for a in d["assets"] if a["name"] == "daed-linux-x86_64_v3_avx2")
+          print("tag=" + d["tag_name"])
+          print("url=" + asset["browser_download_url"])
+          ' >> $GITHUB_OUTPUT
+
+  build:
+    name: Build and push image
+    runs-on: ubuntu-24.04
+    needs: resolve
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Download daed binary
+        run: |
+          mkdir -p image-context
+          curl -fsSL -o image-context/daed "${{ needs.resolve.outputs.asset_url }}"
+          chmod +x image-context/daed
+          file image-context/daed
+          ls -lh image-context/daed
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4.3.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: image-context
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/guochan2019/onekey-daed:${{ needs.resolve.outputs.release_tag }}
+            ghcr.io/guochan2019/onekey-daed:latest
+          provenance: false
+          sbom: false
+
+      - name: Verify image
+        run: |
+          docker run --rm --entrypoint /usr/local/bin/daed \
+            ghcr.io/guochan2019/onekey-daed:${{ needs.resolve.outputs.release_tag }} --version
