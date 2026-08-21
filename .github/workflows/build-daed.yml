@@ -105,12 +105,12 @@ jobs:
           go generate ./trace/trace.go
           cd ..
           # compile v1 (baseline) binary
-          go build -tags="embedallowed,trace" \
+          CGO_ENABLED=0 go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64 \
             -trimpath -buildvcs=false .
           # compile v3 (AVX2) binary
-          GOAMD64=v3 go build -tags="embedallowed,trace" \
+          CGO_ENABLED=0 GOAMD64=v3 go build -tags="embedallowed,trace" \
             -ldflags="-s -w -buildid= -X 'github.com/daeuniverse/dae-wing/db.AppDescription=daed is a integration solution of dae, API and UI.' -X github.com/daeuniverse/dae-wing/db.AppName=daed -X github.com/daeuniverse/dae-wing/db.AppVersion=${{ steps.version.outputs.full_version }}" \
             -o ../daed-linux-x86_64_v3_avx2 \
             -trimpath -buildvcs=false .
